@@ -144,7 +144,26 @@
 <body>
 
 <!-- Modal de configuración (oculto por defecto) -->
-<div id="setup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center">
+<!-- PASSWORD SCREEN -->
+<div id="passwordScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="text-align:center;max-width:320px;width:90%">
+    <p style="font-size:10px;color:var(--blue);letter-spacing:0.14em;text-transform:uppercase;font-weight:700;margin:0 0 10px">Trading Dashboard</p>
+    <h1 style="font-size:24px;font-weight:700;color:var(--text);margin:0 0 8px;letter-spacing:-0.02em">Acceso Privado</h1>
+    <p style="font-size:13px;color:var(--textSub);margin:0 0 28px">Introduce la contraseña para continuar</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="pwInput" type="password" placeholder="Contraseña"
+        style="flex:1;background:var(--panel);border:1px solid var(--borderHi);border-radius:8px;padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;text-align:center"
+        onkeydown="if(event.key==='Enter')checkPw()" />
+    </div>
+    <button onclick="checkPw()"
+      style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">
+      Entrar
+    </button>
+    <p id="pwErr" style="font-size:12px;color:var(--red);margin:10px 0 0;min-height:18px"></p>
+  </div>
+</div>
+
+<div id="setup"  style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center">
   <div style="background:var(--panel);border:1px solid var(--borderHi);border-radius:14px;padding:28px 32px;max-width:480px;width:90%;position:relative">
     <button onclick="closeSetup()" style="position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--textSub);font-size:18px;cursor:pointer;line-height:1">✕</button>
     <p style="font-size:10px;color:var(--blue);letter-spacing:0.12em;text-transform:uppercase;font-weight:600;margin:0 0 8px">Configuración</p>
@@ -204,7 +223,8 @@
 
 <script>
 const CSV_KEY = 'trading_csv_url';
-let currentUrl = localStorage.getItem(CSV_KEY) || '';
+const DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTqa19Bu4VYmAu8tHHdraBMb9EVCl4Ok5bZtD5ITV-8FvmbIfywrOlAa5roS-hPQlKOrzbkULoIdoOC/pub?gid=2004246704&single=true&output=csv';
+let currentUrl = localStorage.getItem(CSV_KEY) || DEFAULT_URL;
 let activeCharts = [];
 let currentFilter = 'all';
 let currentRawData = null;
@@ -1018,6 +1038,32 @@ function renderDash(m) {
   }, 100);
 }
 
+// ─── PASSWORD ──────────────────────────────────────
+const PW_KEY = 'td_auth';
+const CORRECT_PW = 'trading';
+
+function checkPw() {
+  const input = document.getElementById('pwInput');
+  const err = document.getElementById('pwErr');
+  if (!input) return;
+  if (input.value === CORRECT_PW) {
+    localStorage.setItem(PW_KEY, '1');
+    document.getElementById('passwordScreen').style.display = 'none';
+    initDashboard();
+  } else {
+    err.textContent = 'Contraseña incorrecta';
+    input.value = '';
+    input.focus();
+    setTimeout(() => { if(err) err.textContent = ''; }, 2000);
+  }
+}
+
+function initDashboard() {
+  const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+  applyTheme(savedTheme);
+  loadData(currentUrl, null);
+}
+
 // ─── THEME ─────────────────────────────────────────
 const THEME_KEY = 'trading_theme';
 function applyTheme(theme) {
@@ -1039,22 +1085,19 @@ function toggleTheme() {
 
 // ─── AUTO-LOAD ──────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  // Restore theme always
   const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
   applyTheme(savedTheme);
-  if (currentUrl) {
-    loadData(currentUrl, null);
+  // Check password
+  if (localStorage.getItem(PW_KEY) === '1') {
+    document.getElementById('passwordScreen').style.display = 'none';
+    initDashboard();
   } else {
-    // No URL saved yet — show loading screen with config button
-    document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loading').innerHTML = `
-      <div style="text-align:center">
-        <p style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:8px">Trading Dashboard</p>
-        <p style="font-size:13px;color:var(--textSub);margin-bottom:24px">Conecta tu fuente de datos para comenzar</p>
-        <button onclick="showSetup()"
-          style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">
-          Configurar →
-        </button>
-      </div>`;
+    // Show password screen, focus input
+    setTimeout(() => {
+      const inp = document.getElementById('pwInput');
+      if (inp) inp.focus();
+    }, 100);
   }
 });
 </script>
