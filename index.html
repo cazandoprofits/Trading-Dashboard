@@ -640,6 +640,12 @@ function renderDash(m) {
       </div>
     </div>
 
+    <!-- SECCIÓN: WR Mensual por Operador -->
+    <div class="panel" style="margin-top:12px">
+      <div class="panel-h">WinRate Mensual (%) — Desglose por Operador</div>
+      <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
+    </div>
+
     <!-- SECCIÓN: Curvas de Equity por Operador — solo en vista "Todos" -->
     ${currentFilter === 'all' ? `
     <div class="sec"><span class="sec-n">05</span><span class="sec-t">Curvas de Equity por Operador</span><div class="sec-l"></div></div>
@@ -658,13 +664,12 @@ function renderDash(m) {
     </div>` : ''}
 
     <!-- SECCIÓN: PnL mensual -->
-    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Rentabilidad Mensual por Operador</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Rentabilidad y WR Mensual por Operador</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">P&L Mensual (%) — Desglose por Operador</div>
       <div style="padding:14px 18px;position:relative;height:220px">
         <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
       </div>
-      <!-- WR mensual inline -->
-      <div id="monthlyWrBadges" style="padding:0 18px 16px;display:flex;gap:16px;flex-wrap:wrap"></div>
+
     </div>
 
         ${m.openTrades.length ? `
@@ -806,35 +811,47 @@ function renderDash(m) {
       activeCharts.push(c3);
     }
 
-    // Monthly WR badges inline under chart
+    // Monthly WR panel - polished column layout
     const wrBadges = document.getElementById('monthlyWrBadges');
     if (wrBadges && m.monthly.length) {
       const opHexMap3 = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
       let html = '';
       m.monthly.forEach(row => {
         let totalTp = 0, totalSl = 0;
-        const opParts = m.allOps.map(op => {
+        const opRows = m.allOps.map(op => {
           const od = row.ops[op]; if (!od) return null;
           const tp = od.tp||0, sl = od.sl||0;
           totalTp += tp; totalSl += sl;
           const total = tp+sl; if (!total) return null;
           const wr = tp/total*100;
-          const col = opHexMap3[op]||'#4BA3E3';
-          const wrCol = wr>=70?'var(--green)':wr>=50?'var(--yellow)':'var(--red)';
-          return `<span style="font-size:11px;color:var(--textSub)">${op}</span>
-            <span style="font-size:12px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrCol}">${wr.toFixed(0)}%</span>
-            <span style="font-size:10px;color:var(--muted)">${tp}✓${sl}✗</span>`;
+          const opCol = opHexMap3[op]||'#4BA3E3';
+          const wrCol = wr>=70?'#00D49A':wr>=50?'#FFB547':'#FF4C5E';
+          const barW = wr.toFixed(0);
+          return `<div style="display:flex;flex-direction:column;gap:3px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:11px;font-weight:500;color:${opCol}">${op}</span>
+              <span style="font-size:13px;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrCol}">${barW}%</span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="width:${barW}%;height:100%;background:${wrCol};border-radius:3px"></div>
+            </div>
+            <span style="font-size:10px;color:var(--muted)">${tp} TP · ${sl} SL</span>
+          </div>`;
         }).filter(Boolean);
-        if (!opParts.length) return;
+        if (!opRows.length) return;
         const globalTotal = totalTp+totalSl;
         const globalWr = globalTotal>0?(totalTp/globalTotal*100):null;
-        const globalCol = globalWr===null?'var(--muted)':globalWr>=70?'var(--green)':globalWr>=50?'var(--yellow)':'var(--red)';
-        html += `<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;min-width:120px">
-          <span style="font-size:10px;font-weight:600;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">${row.label}</span>
-          <div style="display:flex;flex-direction:column;gap:4px">${opParts.join('<br>')}</div>
-          <div style="border-top:0.5px solid var(--border);padding-top:5px;display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:10px;color:var(--textSub)">Global</span>
-            <span style="font-size:13px;font-weight:700;font-family:'Inter',sans-serif;color:${globalCol}">${globalWr!==null?globalWr.toFixed(0)+'%':'—'}</span>
+        const globalCol = globalWr===null?'var(--muted)':globalWr>=70?'#00D49A':globalWr>=50?'#FFB547':'#FF4C5E';
+        html += `<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;min-width:160px;flex:1;max-width:220px">
+          <div style="background:var(--bg);padding:10px 14px;border-bottom:0.5px solid var(--border)">
+            <span style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.08em">${row.label}</span>
+          </div>
+          <div style="padding:12px 14px;display:flex;flex-direction:column;gap:12px">
+            ${opRows.join('')}
+            <div style="border-top:0.5px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:11px;font-weight:500;color:var(--textSub)">Win Rate Global</span>
+              <span style="font-size:16px;font-weight:700;font-family:'Inter',sans-serif;color:${globalCol}">${globalWr!==null?globalWr.toFixed(0)+'%':'—'}</span>
+            </div>
           </div>
         </div>`;
       });
