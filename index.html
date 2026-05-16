@@ -393,7 +393,72 @@ function compute(rows) {
   };
   const monthlyBarData = monthlyBar();
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData };
+  // ── NEW METRICS ──
+  // Avg Win / Avg Loss / Payoff Ratio
+  const winPnls = sorted.filter(r => pnl(r) > 0).map(r => pnl(r));
+  const lossPnls = sorted.filter(r => pnl(r) < 0).map(r => Math.abs(pnl(r)));
+  const avgWin = winPnls.length ? winPnls.reduce((a,b)=>a+b,0)/winPnls.length : 0;
+  const avgLoss = lossPnls.length ? lossPnls.reduce((a,b)=>a+b,0)/lossPnls.length : 0;
+  const payoffRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
+
+  // Best / Worst trade
+  const bestTrade = sorted.reduce((best, r) => pnl(r) > pnl(best) ? r : best, sorted[0] || {});
+  const worstTrade = sorted.reduce((worst, r) => pnl(r) < pnl(worst) ? r : worst, sorted[0] || {});
+
+  // Recovery Factor = NetPnL / MaxDD
+  const recoveryFactor = maxDD > 0 ? netPnl / maxDD : 0;
+
+  // Calmar Ratio = annualized return / MaxDD
+  const periodsInYear = nM > 0 ? 12 / nM : 1;
+  const annualizedReturn = netPnl * periodsInYear;
+  const calmarRatio = maxDD > 0 ? annualizedReturn / maxDD : 0;
+
+  // % time in drawdown
+  const inDD = equity.filter(e => e.dd > 0).length;
+  const pctTimeInDD = equity.length > 0 ? (inDD / equity.length * 100) : 0;
+
+  // Rolling Win Rate (last 10 closed trades)
+  const last10 = sorted.slice(-10);
+  const rolling10Tp = last10.filter(r => pnl(r) > 0).length;
+  const rolling10Wr = last10.length > 0 ? rolling10Tp / last10.length * 100 : 0;
+  const rollingHistory = sorted.map((_, i) => {
+    const window = sorted.slice(Math.max(0, i-9), i+1);
+    const wTp = window.filter(r => pnl(r) > 0).length;
+    return { i: i+1, wr: wTp / window.length * 100, n: `N·${sorted[i]['N·']||sorted[i]['N']}` };
+  });
+
+  // Analysis by pair
+  const pairStats = {};
+  closed.forEach(r => {
+    const par = r.PAR || '?';
+    if (!pairStats[par]) pairStats[par] = { par, ops:0, tp:0, sl:0, grossW:0, grossL:0, netPnl:0 };
+    pairStats[par].ops++;
+    if (isTP(r)) { pairStats[par].tp++; pairStats[par].grossW += pnl(r); }
+    if (isSL(r)) { pairStats[par].sl++; pairStats[par].grossL += Math.abs(pnl(r)); }
+    pairStats[par].netPnl += pnl(r);
+  });
+  const pairArray = Object.values(pairStats).map(p => ({
+    ...p,
+    wr: p.ops > 0 ? p.tp/p.ops*100 : 0,
+    pf: p.grossL > 0 ? p.grossW/p.grossL : p.grossW > 0 ? Infinity : 0
+  })).sort((a,b) => b.ops - a.ops);
+
+  // Monthly bar data aware of filter (merge D&S into operator when filtered)
+  const monthlyBarDataFiltered = (filt) => {
+    const labels = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1).map(m=>m.label);
+    if (filt === 'all') return monthlyBarData;
+    // When filtered by Dani or Sergio, merge D&S into their data
+    const mergedOps = {};
+    labels.forEach((lbl, li) => {
+      const row = Object.values(monthly).find(m=>m.label===lbl);
+      const base = row?.ops[filt]?.pnl || 0;
+      const ds = row?.ops['D&S']?.pnl || 0;
+      mergedOps[lbl] = base + ds;
+    });
+    return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
+  };
+
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -498,12 +563,21 @@ function renderDash(m) {
 
   const kpiHTML = `<div class="kpis">
     ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
-      ['Win Rate', m.wr.toFixed(1) + '%', `${m.tp}TP / ${m.sl}SL`, m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
+      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
       ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Max Drawdown', m.maxDD.toFixed(2) + '%', `${m.maxDDPeak.toFixed(1)}% → ${m.maxDDValley.toFixed(1)}%`, m.maxDD < 5 ? 'var(--yellow)' : 'var(--red)'],
-      ['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? `Solo ${m.nMonths} meses · No fiable` : `Sobre ${m.nMonths} meses · ×√12`, m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? `Mín. 12 meses para ser fiable` : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)']]
-      .map(([l, v, s, c]) => `<div class="kpi"><div class="kpi-l">${l}</div><div class="kpi-v" style="color:${c}">${v}</div><div class="kpi-s">${s}</div></div>`).join('')}
+      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
+      ['Recovery Factor', m.recoveryFactor.toFixed(2)+'x', 'Retorno Neto / Max DD', m.recoveryFactor >= 3 ? 'var(--green)' : m.recoveryFactor >= 1.5 ? 'var(--yellow)' : 'var(--red)'],
+      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
+  </div>
+  <div class="kpis" style="margin-top:9px">
+    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Avg Win', pct(m.avgWin), 'Media op ganadora', 'var(--green)'],
+      ['Avg Loss', '-'+m.avgLoss.toFixed(1)+'%', 'Media op perdedora', 'var(--red)'],
+      ['Payoff Ratio', m.payoffRatio.toFixed(2)+'x', 'Avg Win / Avg Loss real', m.payoffRatio >= 1 ? 'var(--green)' : 'var(--red)'],
+      ['% Tiempo en DD', m.pctTimeInDD.toFixed(0)+'%', 'Ops bajo máximo histórico', m.pctTimeInDD < 30 ? 'var(--green)' : m.pctTimeInDD < 60 ? 'var(--yellow)' : 'var(--red)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
   </div>`;
 
   const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
@@ -607,7 +681,7 @@ function renderDash(m) {
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
         ${[['Racha Máx. Ganadora', `${m.maxW} TP consecutivos`, '#00D49A'],
           ['Racha Máx. Perdedora', `${m.maxL} SL consecutivos`, '#FF4C5E'],
-          ['Max Drawdown', `−${m.maxDD.toFixed(2)}% · ${m.maxDDPeak.toFixed(1)}% → ${m.maxDDValley.toFixed(1)}%`, m.maxDD < 5 ? '#FFB547' : '#FF4C5E'],
+          ['Max Drawdown', `−${m.maxDD.toFixed(2)}% · ${m.maxDDPeak.toFixed(1)}% → ${m.maxDDValley.toFixed(1)}%`, '#FF4C5E'],
           ['Riesgo de Ruina', '< 0.1%', '#00D49A'],
           ['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],
           ['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']]
@@ -640,7 +714,29 @@ function renderDash(m) {
       </div>
     </div>
 
+    <!-- SECCIÓN: Análisis por Par -->
+    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Análisis por Par de Divisas</span><div class="sec-l"></div></div>
+    <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="pairTable"></table>
+      </div>
+    </div>
+
+    <!-- SECCIÓN: Rolling Win Rate -->
+    <div class="sec"><span class="sec-n">08</span><span class="sec-t">Rolling Win Rate (Últimas 10 Operaciones)</span><div class="sec-l"></div></div>
+    <div class="panel"><div class="panel-h">Evolución del Win Rate — Ventana Móvil de 10 Ops</div>
+      <div style="padding:14px 18px;position:relative;height:180px">
+        <canvas id="rollingWrChart" role="img" aria-label="Rolling win rate últimas 10 operaciones">Win rate móvil.</canvas>
+      </div>
+      <div style="padding:4px 18px 14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:11px;color:var(--textSub)">Última ventana de 10 ops:</div>
+        <div style="font-size:14px;font-weight:700;color:${m.rolling10Wr>=70?'var(--green)':m.rolling10Wr>=50?'var(--yellow)':'var(--red)'}">${m.rolling10Wr.toFixed(0)}%</div>
+        <div style="font-size:11px;color:var(--textSub)">WR global: <strong style="color:var(--text)">${m.wr.toFixed(1)}%</strong></div>
+      </div>
+    </div>
+
     <!-- SECCIÓN: WR Mensual por Operador -->
+    
     <div class="panel" style="margin-top:12px">
       <div class="panel-h">WinRate Mensual (%) — Desglose por Operador</div>
       <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
@@ -776,16 +872,18 @@ function renderDash(m) {
     const mbCtx = document.getElementById('monthlyBarChart');
     if (mbCtx && m.monthlyBarData) {
       const opHexMap2 = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
-      const barDatasets = m.allOps.map(op => ({
-        label: op,
-        data: m.monthlyBarData.series[op] || [],
+      const filteredBarData = m.monthlyBarDataFiltered(currentFilter);
+      const barOps = currentFilter === 'all' ? m.allOps : [currentFilter];
+      const barDatasets = barOps.map(op => ({
+        label: currentFilter === 'all' ? op : `${op} + D&S`,
+        data: filteredBarData.series[op] || [],
         backgroundColor: (opHexMap2[op] || '#4BA3E3') + '99',
         borderColor: opHexMap2[op] || '#4BA3E3',
         borderWidth: 1, borderRadius: 4
       }));
       const c3 = new Chart(mbCtx, {
         type: 'bar',
-        data: { labels: m.monthlyBarData.labels, datasets: barDatasets },
+        data: { labels: filteredBarData.labels, datasets: barDatasets },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
@@ -809,6 +907,66 @@ function renderDash(m) {
         }
       });
       activeCharts.push(c3);
+    }
+
+    // Pair analysis table
+    const pairTable = document.getElementById('pairTable');
+    if (pairTable && m.pairArray && m.pairArray.length) {
+      let ph = '<thead><tr>';
+      ['Par','Ops','TP','SL','Win Rate','Avg Win','Avg Loss','P&L Neto','Profit Factor'].forEach(h => {
+        ph += `<th style="padding:9px 14px;text-align:${h==='Par'?'left':'center'};font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">${h}</th>`;
+      });
+      ph += '</tr></thead><tbody>';
+      m.pairArray.forEach(p => {
+        const wrC = p.wr>=70?'var(--green)':p.wr>=50?'var(--yellow)':'var(--red)';
+        const pnlC = p.netPnl>=0?'var(--green)':'var(--red)';
+        const pfC = p.pf===Infinity||p.pf>99?'var(--green)':p.pf>=2?'var(--green)':p.pf>=1?'var(--yellow)':'var(--red)';
+        const wins = m.equity.filter ? [] : [];
+        // Calculate avg win/loss per pair from closed data
+        const pairClosed = m.equity.filter ? m.pairArray : [];
+        ph += `<tr style="border-top:0.5px solid var(--border)">
+          <td style="padding:9px 14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text)">${p.par}</td>
+          <td style="padding:9px 14px;text-align:center;color:var(--textSub)">${p.ops}</td>
+          <td style="padding:9px 14px;text-align:center;color:var(--green);font-weight:600">${p.tp}</td>
+          <td style="padding:9px 14px;text-align:center;color:var(--red);font-weight:600">${p.sl}</td>
+          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrC}">${p.wr.toFixed(0)}%</td>
+          <td style="padding:9px 14px;text-align:center;color:var(--green);font-family:'Inter',sans-serif">${p.tp>0?(p.grossW/p.tp).toFixed(1)+'%':'—'}</td>
+          <td style="padding:9px 14px;text-align:center;color:var(--red);font-family:'Inter',sans-serif">${p.sl>0?(p.grossL/p.sl).toFixed(1)+'%':'—'}</td>
+          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${pnlC}">${p.netPnl>=0?'+':''}${p.netPnl.toFixed(1)}%</td>
+          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;color:${pfC}">${p.pf===Infinity||p.pf>99?'∞':p.pf.toFixed(2)}</td>
+        </tr>`;
+      });
+      ph += '</tbody>';
+      pairTable.innerHTML = ph;
+    }
+
+    // Rolling Win Rate chart
+    const rwCtx = document.getElementById('rollingWrChart');
+    if (rwCtx && m.rollingHistory && m.rollingHistory.length) {
+      const rwC = new Chart(rwCtx, {
+        type: 'line',
+        data: {
+          labels: m.rollingHistory.map(r => r.i),
+          datasets: [
+            { label: 'Rolling WR', data: m.rollingHistory.map(r => r.wr),
+              borderColor: '#4BA3E3', borderWidth: 2, tension: 0.4, fill: false,
+              pointRadius: 2, pointBackgroundColor: '#4BA3E3' },
+            { label: 'WR Global', data: m.rollingHistory.map(() => m.wr),
+              borderColor: '#00D49A', borderWidth: 1.5, borderDash: [5,4],
+              tension: 0, fill: false, pointRadius: 0 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ctx.dataset.label+': '+ctx.parsed.y.toFixed(0)+'%' } } },
+          scales: {
+            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(128,128,128,0.08)' } },
+            y: { min:0, max:100, ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => v+'%' }, grid: { color: 'rgba(128,128,128,0.08)' } }
+          }
+        }
+      });
+      activeCharts.push(rwC);
     }
 
     // Monthly WR panel - polished column layout
