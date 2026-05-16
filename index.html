@@ -663,9 +663,8 @@ function renderDash(m) {
       <div style="padding:14px 18px;position:relative;height:220px">
         <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
       </div>
-      <div style="padding:6px 18px 14px;font-size:11px;color:var(--textSub)">
-        Cada barra representa el P&L acumulado de ese operador en el mes. Las barras negativas indican pérdida neta mensual.
-      </div>
+      <!-- WR mensual inline -->
+      <div id="monthlyWrBadges" style="padding:0 18px 16px;display:flex;gap:16px;flex-wrap:wrap"></div>
     </div>
 
         ${m.openTrades.length ? `
@@ -805,6 +804,41 @@ function renderDash(m) {
         }
       });
       activeCharts.push(c3);
+    }
+
+    // Monthly WR badges inline under chart
+    const wrBadges = document.getElementById('monthlyWrBadges');
+    if (wrBadges && m.monthly.length) {
+      const opHexMap3 = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
+      let html = '';
+      m.monthly.forEach(row => {
+        let totalTp = 0, totalSl = 0;
+        const opParts = m.allOps.map(op => {
+          const od = row.ops[op]; if (!od) return null;
+          const tp = od.tp||0, sl = od.sl||0;
+          totalTp += tp; totalSl += sl;
+          const total = tp+sl; if (!total) return null;
+          const wr = tp/total*100;
+          const col = opHexMap3[op]||'#4BA3E3';
+          const wrCol = wr>=70?'var(--green)':wr>=50?'var(--yellow)':'var(--red)';
+          return `<span style="font-size:11px;color:var(--textSub)">${op}</span>
+            <span style="font-size:12px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrCol}">${wr.toFixed(0)}%</span>
+            <span style="font-size:10px;color:var(--muted)">${tp}✓${sl}✗</span>`;
+        }).filter(Boolean);
+        if (!opParts.length) return;
+        const globalTotal = totalTp+totalSl;
+        const globalWr = globalTotal>0?(totalTp/globalTotal*100):null;
+        const globalCol = globalWr===null?'var(--muted)':globalWr>=70?'var(--green)':globalWr>=50?'var(--yellow)':'var(--red)';
+        html += `<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;min-width:120px">
+          <span style="font-size:10px;font-weight:600;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">${row.label}</span>
+          <div style="display:flex;flex-direction:column;gap:4px">${opParts.join('<br>')}</div>
+          <div style="border-top:0.5px solid var(--border);padding-top:5px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:10px;color:var(--textSub)">Global</span>
+            <span style="font-size:13px;font-weight:700;font-family:'Inter',sans-serif;color:${globalCol}">${globalWr!==null?globalWr.toFixed(0)+'%':'—'}</span>
+          </div>
+        </div>`;
+      });
+      wrBadges.innerHTML = html;
     }
   }, 100);
 }
