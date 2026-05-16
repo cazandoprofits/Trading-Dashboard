@@ -586,17 +586,15 @@ function renderDash(m) {
       ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
       ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
       ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
-      ['Recovery Factor', m.recoveryFactor.toFixed(2)+'x', 'Retorno Neto / Max DD', m.recoveryFactor >= 3 ? 'var(--green)' : m.recoveryFactor >= 1.5 ? 'var(--yellow)' : 'var(--red)'],
-      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)']
+      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
+      ['% Tiempo en DD', m.pctTimeInDD.toFixed(0)+'%', 'Ops bajo máximo histórico', m.pctTimeInDD < 30 ? 'var(--green)' : m.pctTimeInDD < 60 ? 'var(--yellow)' : 'var(--red)']
     ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
   </div>
   <div class="kpis" style="margin-top:9px">
     ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
       ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Avg Win', pct(m.avgWin), 'Media op ganadora', 'var(--green)'],
-      ['Avg Loss', '-'+m.avgLoss.toFixed(1)+'%', 'Media op perdedora', 'var(--red)'],
-      ['Payoff Ratio', m.payoffRatio.toFixed(2)+'x', 'Avg Win / Avg Loss real', m.payoffRatio >= 1 ? 'var(--green)' : 'var(--red)'],
-      ['% Tiempo en DD', m.pctTimeInDD.toFixed(0)+'%', 'Ops bajo máximo histórico', m.pctTimeInDD < 30 ? 'var(--green)' : m.pctTimeInDD < 60 ? 'var(--yellow)' : 'var(--red)']
+      ['% Tiempo en DD', m.pctTimeInDD.toFixed(0)+'%', 'Ops bajo máximo histórico', m.pctTimeInDD < 30 ? 'var(--green)' : m.pctTimeInDD < 60 ? 'var(--yellow)' : 'var(--red)'],
+      ['Rolling WR (10 ops)', m.rolling10Wr.toFixed(0)+'%', 'Últimas 10 operaciones', m.rolling10Wr >= 70 ? 'var(--green)' : m.rolling10Wr >= 50 ? 'var(--yellow)' : 'var(--red)']
     ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
   </div>`;
 
@@ -933,7 +931,7 @@ function renderDash(m) {
     const pairTable = document.getElementById('pairTable');
     if (pairTable && m.pairArray && m.pairArray.length) {
       let ph = '<thead><tr>';
-      ['Par','Ops','TP','SL','Win Rate','Avg Win','Avg Loss','P&L Neto','Profit Factor'].forEach(h => {
+      ['Par','Ops','TP','SL','Win Rate','P&L Neto','Profit Factor'].forEach(h => {
         ph += `<th style="padding:9px 14px;text-align:${h==='Par'?'left':'center'};font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">${h}</th>`;
       });
       ph += '</tr></thead><tbody>';
@@ -950,8 +948,6 @@ function renderDash(m) {
           <td style="padding:9px 14px;text-align:center;color:var(--green);font-weight:600">${p.tp}</td>
           <td style="padding:9px 14px;text-align:center;color:var(--red);font-weight:600">${p.sl}</td>
           <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrC}">${p.wr.toFixed(0)}%</td>
-          <td style="padding:9px 14px;text-align:center;color:var(--green);font-family:'Inter',sans-serif">${p.tp>0?(p.grossW/p.tp).toFixed(1)+'%':'—'}</td>
-          <td style="padding:9px 14px;text-align:center;color:var(--red);font-family:'Inter',sans-serif">${p.sl>0?(p.grossL/p.sl).toFixed(1)+'%':'—'}</td>
           <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${pnlC}">${p.netPnl>=0?'+':''}${p.netPnl.toFixed(1)}%</td>
           <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;color:${pfC}">${p.pf===Infinity||p.pf>99?'∞':p.pf.toFixed(2)}</td>
         </tr>`;
