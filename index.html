@@ -412,7 +412,7 @@ function compute(rows) {
     return { labels: allMonths, series: result };
   };
   const monthlyBarData = monthlyBar();
-  const monthlyBarData = monthlyBar();
+  
 
   // % Meses positivos
   const monthlyPnls = Object.values(monthly).map(m => {
@@ -719,13 +719,13 @@ function renderDash(m) {
     </div>
     <div class="grid2">
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
-        ${[['Racha Máx. Ganadora', `${m.maxW} TP consecutivos`, '#00D49A'],
-          ['Racha Máx. Perdedora', `${m.maxL} SL consecutivos`, '#FF4C5E'],
-          ['Max Drawdown', `−${m.maxDD.toFixed(2)}% · ${m.maxDDPeak.toFixed(1)}% → ${m.maxDDValley.toFixed(1)}%`, '#FF4C5E'],
+        ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],
+          ['Racha Máx. Perdedora', m.maxL+' SL consecutivos', '#FF4C5E'],
+          ['Max Drawdown', '−'+m.maxDD.toFixed(2)+'% · '+m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
           ['Riesgo de Ruina', '< 0.1%', '#00D49A'],
           ['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],
           ['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']]
-          .map(([l, v, c]) => `<div class="kv" style="padding:8px 16px"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
+          .map(([l, v, c]) => '<div class="kv" style="padding:8px 16px"><span class="kv-l">'+l+'</span><span class="kv-v" style="color:'+c+'">'+v+'</span></div>').join('')}
       </div>
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
@@ -1126,9 +1126,14 @@ function checkPw() {
 }
 
 function initDashboard() {
-  const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
-  applyTheme(savedTheme);
-  loadData(currentUrl, null);
+  try {
+    const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+    applyTheme(savedTheme);
+    loadData(currentUrl, null);
+  } catch(e) {
+    console.error('initDashboard error:', e);
+    alert('Error al iniciar: ' + e.message);
+  }
 }
 
 // ─── THEME ─────────────────────────────────────────
