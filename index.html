@@ -765,7 +765,11 @@ function renderDash(m) {
       <div style="padding:14px 18px;position:relative;height:160px">
         <canvas id="freqChart" role="img" aria-label="Frecuencia semanal">Ops por semana.</canvas>
       </div>
-      <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">Media: <strong style="color:var(--text)">${m.avgOpsPerWeek.toFixed(1)} ops/semana</strong></div>
+      <div style="padding:4px 18px 14px;display:flex;gap:18px;font-size:11px;color:var(--textSub);flex-wrap:wrap">
+        <span>Media global: <strong style="color:#FFB547">${m.avgOpsPerWeek.toFixed(1)} ops/sem</strong></span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:20px;height:2px;background:#4BA3E3;border-radius:2px"></span>Media móvil (4 sem.)</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:20px;height:2px;background:#FFB547;border-radius:2px;border-top:2px dashed #FFB547"></span>Media global</span>
+      </div>
     </div>
       <div class="panel"><div class="panel-h">Duración Media por Resultado</div>
         <div class="panel-body">
@@ -1024,30 +1028,73 @@ function renderDash(m) {
       activeCharts.push(rwC);
     }
 
-    // Frequency chart
+    // Frequency chart with moving average
     const freqCtx = document.getElementById('freqChart');
     if (freqCtx && m.weeklyFreq && m.weeklyFreq.length) {
+      const freqData = m.weeklyFreq.map(w => w.ops);
+      const windowSize = Math.min(4, m.weeklyFreq.length);
+      const movAvg = freqData.map((_, i) => {
+        const slice = freqData.slice(Math.max(0, i - windowSize + 1), i + 1);
+        return +(slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(2);
+      });
       const fc = new Chart(freqCtx, {
         type: 'bar',
         data: {
           labels: m.weeklyFreq.map(w => w.key.replace('-W','/W')),
-          datasets: [{
-            label: 'Ops',
-            data: m.weeklyFreq.map(w => w.ops),
-            backgroundColor: m.weeklyFreq.map(w => {
-              const wr = w.ops > 0 ? w.tp/w.ops : 0;
-              return wr >= 0.7 ? '#00D49A88' : wr >= 0.5 ? '#FFB54788' : '#FF4C5E88';
-            }),
-            borderRadius: 4
-          }]
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Ops semana',
+              data: freqData,
+              backgroundColor: m.weeklyFreq.map(w => {
+                const wr = w.ops > 0 ? w.tp/w.ops : 0;
+                return wr >= 0.7 ? '#00D49A66' : wr >= 0.5 ? '#FFB54766' : '#FF4C5E66';
+              }),
+              borderRadius: 4,
+              order: 2
+            },
+            {
+              type: 'line',
+              label: 'Media móvil',
+              data: movAvg,
+              borderColor: '#4BA3E3',
+              borderWidth: 2,
+              tension: 0.4,
+              fill: false,
+              pointRadius: 3,
+              pointBackgroundColor: '#4BA3E3',
+              order: 1
+            },
+            {
+              type: 'line',
+              label: 'Media global',
+              data: freqData.map(() => +m.avgOpsPerWeek.toFixed(2)),
+              borderColor: '#FFB547',
+              borderWidth: 1.5,
+              borderDash: [6, 4],
+              tension: 0,
+              fill: false,
+              pointRadius: 0,
+              order: 0
+            }
+          ]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: ctx => {
-              const w = m.weeklyFreq[ctx.dataIndex];
-              return [ctx.parsed.y+' ops', w.tp+'✓ '+w.sl+'✗'];
-            }}}},
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { 
+              title: items => items[0].label,
+              label: ctx => {
+                if (ctx.dataset.label === 'Ops semana') {
+                  const w = m.weeklyFreq[ctx.dataIndex];
+                  return [ctx.parsed.y+' ops · '+w.tp+'✓ '+w.sl+'✗'];
+                }
+                if (ctx.dataset.label === 'Media móvil') return 'Media móvil: '+ctx.parsed.y;
+                return 'Media global: '+ctx.parsed.y;
+              }
+            }}
+          },
           scales: {
             x: { ticks: { color: '#5A7A9A', font: { size: 8 }, maxRotation: 45 }, grid: { color: 'rgba(128,128,128,0.06)' } },
             y: { ticks: { color: '#5A7A9A', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(128,128,128,0.06)' } }
