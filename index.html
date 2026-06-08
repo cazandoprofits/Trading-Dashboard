@@ -461,7 +461,7 @@ function compute(rows) {
     ...p,
     wr: p.ops > 0 ? p.tp/p.ops*100 : 0,
     pf: p.grossL > 0 ? p.grossW/p.grossL : p.grossW > 0 ? Infinity : 0
-  })).sort((a,b) => b.ops - a.ops);
+  })).sort((a,b) => b.wr - a.wr);
 
   // Monthly bar data aware of filter (merge D&S into operator when filtered)
   const monthlyBarDataFiltered = (filt) => {
@@ -686,10 +686,7 @@ function renderDash(m) {
       </table></div>
     </div>
 
-    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Calidad Operativa — Análisis por Tipo de Entrada</span><div class="sec-l"></div></div>
-    <div style="display:grid;grid-template-columns:repeat(${Object.keys(m.tipos).length},1fr);gap:12px;margin-bottom:14px">${tipoCards}</div>
-
-    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Curva de Equity y Gestión del Riesgo</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Curva de Equity y Gestión del Riesgo</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Curva de Equity (Base 100%)</div>
       <div style="padding:14px 18px;position:relative;height:210px">
         <canvas id="eqChart" role="img" aria-label="Curva de equity acumulado por operación">Equity acumulado.</canvas>
@@ -708,7 +705,7 @@ function renderDash(m) {
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
 
-    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Eficiencia Temporal y Sesgos Semanales</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Eficiencia Temporal y Sesgos Semanales</span><div class="sec-l"></div></div>
     <div class="grid2">
       <div class="panel"><div class="panel-h">Duración Media por Resultado</div>
         <div class="panel-body">
@@ -733,7 +730,7 @@ function renderDash(m) {
     </div>
 
     <!-- SECCIÓN: Análisis por Par -->
-    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Análisis por Par de Divisas</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Análisis por Par de Divisas</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
       <div style="overflow-x:auto">
         <table class="tbl" id="pairTable"></table>
@@ -741,7 +738,7 @@ function renderDash(m) {
     </div>
 
     <!-- SECCIÓN: Rolling Win Rate -->
-    <div class="sec"><span class="sec-n">08</span><span class="sec-t">Rolling Win Rate (Últimas 10 Operaciones)</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Rolling Win Rate (Últimas 10 Operaciones)</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Evolución del Win Rate — Ventana Móvil de 10 Ops</div>
       <div style="padding:14px 18px;position:relative;height:180px">
         <canvas id="rollingWrChart" role="img" aria-label="Rolling win rate últimas 10 operaciones">Win rate móvil.</canvas>
@@ -762,7 +759,7 @@ function renderDash(m) {
 
     <!-- SECCIÓN: Curvas de Equity por Operador — solo en vista "Todos" -->
     ${currentFilter === 'all' ? `
-    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Curvas de Equity por Operador</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Curvas de Equity por Operador</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Equity Individual Base 100 — Comparativa por Operador</div>
       <div style="padding:14px 18px;position:relative;height:220px">
         <canvas id="opEqChart" role="img" aria-label="Curvas de Equity por Operador">Equity por operador.</canvas>
@@ -778,7 +775,7 @@ function renderDash(m) {
     </div>` : ''}
 
     <!-- SECCIÓN: PnL mensual -->
-    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Rentabilidad y WR Mensual por Operador</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Rentabilidad y WR Mensual por Operador</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">P&L Mensual (%) — Desglose por Operador</div>
       <div style="padding:14px 18px;position:relative;height:220px">
         <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
