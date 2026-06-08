@@ -412,6 +412,38 @@ function compute(rows) {
     return { labels: allMonths, series: result };
   };
   const monthlyBarData = monthlyBar();
+  const monthlyBarData = monthlyBar();
+
+  // % Meses positivos
+  const monthlyPnls = Object.values(monthly).map(m => {
+    return Object.values(m.ops).reduce((s, o) => s + (o.pnl||0), 0);
+  });
+  const posMonths = monthlyPnls.filter(p => p > 0).length;
+  const pctPosMonths = monthlyPnls.length > 0 ? posMonths / monthlyPnls.length * 100 : 0;
+
+  // Mejor y peor mes
+  const monthlyLabels = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1);
+  const monthlyPnlMap2 = monthlyLabels.map(m => ({
+    label: m.label,
+    pnl: Object.values(m.ops).reduce((s,o)=>s+(o.pnl||0),0)
+  }));
+  const bestMonth = monthlyPnlMap2.reduce((b,m) => m.pnl > b.pnl ? m : b, monthlyPnlMap2[0]||{label:'—',pnl:0});
+  const worstMonth = monthlyPnlMap2.reduce((w,m) => m.pnl < w.pnl ? m : w, monthlyPnlMap2[0]||{label:'—',pnl:0});
+
+  // Frecuencia de operaciones por semana
+  const weekMap = {};
+  closed.forEach(r => {
+    const d = parseDate(r.Fecha); if (!d) return;
+    const yr = d.getFullYear();
+    const wk = Math.ceil((((d - new Date(yr,0,1))/86400000) + new Date(yr,0,1).getDay()+1)/7);
+    const key = yr+'-W'+String(wk).padStart(2,'0');
+    if (!weekMap[key]) weekMap[key] = { key, label: key, ops: 0, tp: 0, sl: 0 };
+    weekMap[key].ops++;
+    if (isTP(r)) weekMap[key].tp++;
+    if (isSL(r)) weekMap[key].sl++;
+  });
+  const weeklyFreq = Object.values(weekMap).sort((a,b)=>a.key<b.key?-1:1);
+  const avgOpsPerWeek = weeklyFreq.length > 0 ? weeklyFreq.reduce((s,w)=>s+w.ops,0)/weeklyFreq.length : 0;
 
   // ── NEW METRICS ──
   // Avg Win / Avg Loss / Payoff Ratio
@@ -478,7 +510,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -593,8 +625,10 @@ function renderDash(m) {
   <div class="kpis" style="margin-top:9px">
     ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
       ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['% Tiempo en DD', m.pctTimeInDD.toFixed(0)+'%', 'Ops bajo máximo histórico', m.pctTimeInDD < 30 ? 'var(--green)' : m.pctTimeInDD < 60 ? 'var(--yellow)' : 'var(--red)'],
-      ['Rolling WR (10 ops)', m.rolling10Wr.toFixed(0)+'%', 'Últimas 10 operaciones', m.rolling10Wr >= 70 ? 'var(--green)' : m.rolling10Wr >= 50 ? 'var(--yellow)' : 'var(--red)']
+      ['% Meses Positivos', m.pctPosMonths.toFixed(0)+'%', m.posMonths+' de '+m.nMonths+' meses en positivo', m.pctPosMonths >= 75 ? 'var(--green)' : m.pctPosMonths >= 50 ? 'var(--yellow)' : 'var(--red)'],
+      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
+      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', 'var(--red)'],
+      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
     ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
   </div>`;
 
@@ -677,16 +711,7 @@ function renderDash(m) {
   document.getElementById('content').innerHTML = `
     ${kpiHTML}
 
-    <div class="sec"><span class="sec-n">01</span><span class="sec-t">Rentabilidad y Atribución por Operador</span><div class="sec-l"></div></div>
-    <div class="cards3">${opCards}</div>
-    <div class="panel"><div class="panel-h">Matriz de Rentabilidad Mensual</div>
-      <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr><th>Mes</th>${m.allOps.map(op => `<th class="r" style="color:${oc(op)}" colspan="2">${op}</th>`).join('')}<th class="r">Total</th><th class="r" style="color:var(--textSub)">WR Mes</th></tr></thead>
-        <tbody>${monthRows}</tbody>
-      </table></div>
-    </div>
-
-    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Curva de Equity y Gestión del Riesgo</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">01</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Curva de Equity (Base 100%)</div>
       <div style="padding:14px 18px;position:relative;height:210px">
         <canvas id="eqChart" role="img" aria-label="Curva de equity acumulado por operación">Equity acumulado.</canvas>
@@ -705,8 +730,42 @@ function renderDash(m) {
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
 
-    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Eficiencia Temporal y Sesgos Semanales</span><div class="sec-l"></div></div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Mes</th>${m.allOps.map(op => `<th class="r" style="color:${oc(op)}" colspan="2">${op}</th>`).join('')}<th class="r">Total</th><th class="r" style="color:var(--textSub)">WR Mes</th></tr></thead>
+        <tbody>${monthRows}</tbody>
+      </table></div>
+    </div>
+
+    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
+    <div class="cards3">${opCards}</div>
+      <div style="padding:14px 18px;position:relative;height:220px">
+        <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
+      </div>
+
+    </div>
+
+    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Calidad del Sistema — Análisis por Par</span><div class="sec-l"></div></div>
+    <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="pairTable"></table>
+      </div>
+    </div>
+
+    <!-- SECCIÓN: Rolling Win Rate -->
+    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Gestión del Riesgo</span><div class="sec-l"></div></div>
     <div class="grid2">
+      <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
+        ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],['Racha Máx. Perdedora', m.maxL+' SL consecutivos', '#FF4C5E'],['Max Drawdown', '−'+m.maxDD.toFixed(2)+'% · '+m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],['Riesgo de Ruina', '< 0.1%', '#00D49A'],['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']].map(([l,v,c]) => '<div class="kv" style="padding:8px 16px"><span class="kv-l">'+l+'</span><span class="kv-v" style="color:'+c+'">'+v+'</span></div>').join('')}
+      </div>
+      <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
+    </div>
+    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Eficiencia Operativa</span><div class="sec-l"></div></div>
+    <div class="panel"><div class="panel-h">Frecuencia de Operaciones — Actividad Semanal</div>
+      <div style="padding:14px 18px;position:relative;height:160px">
+        <canvas id="freqChart" role="img" aria-label="Frecuencia semanal">Ops por semana.</canvas>
+      </div>
+      <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">Media: <strong style="color:var(--text)">${m.avgOpsPerWeek.toFixed(1)} ops/semana</strong></div>
+    </div>
       <div class="panel"><div class="panel-h">Duración Media por Resultado</div>
         <div class="panel-body">
           ${[['Take Profit', m.tpDurAvg, '#00D49A'], ['Stop Loss', m.slDurAvg, '#FF4C5E']].map(([l, v, c]) => `
@@ -730,15 +789,7 @@ function renderDash(m) {
     </div>
 
     <!-- SECCIÓN: Análisis por Par -->
-    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Análisis por Par de Divisas</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
-      <div style="overflow-x:auto">
-        <table class="tbl" id="pairTable"></table>
-      </div>
-    </div>
-
-    <!-- SECCIÓN: Rolling Win Rate -->
-    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Rolling Win Rate (Últimas 10 Operaciones)</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Estado Actual — Rendimiento Reciente</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Evolución del Win Rate — Ventana Móvil de 10 Ops</div>
       <div style="padding:14px 18px;position:relative;height:180px">
         <canvas id="rollingWrChart" role="img" aria-label="Rolling win rate últimas 10 operaciones">Win rate móvil.</canvas>
@@ -759,8 +810,6 @@ function renderDash(m) {
 
     <!-- SECCIÓN: Curvas de Equity por Operador — solo en vista "Todos" -->
     ${currentFilter === 'all' ? `
-    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Curvas de Equity por Operador</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Equity Individual Base 100 — Comparativa por Operador</div>
       <div style="padding:14px 18px;position:relative;height:220px">
         <canvas id="opEqChart" role="img" aria-label="Curvas de Equity por Operador">Equity por operador.</canvas>
       </div>
@@ -775,14 +824,6 @@ function renderDash(m) {
     </div>` : ''}
 
     <!-- SECCIÓN: PnL mensual -->
-    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Rentabilidad y WR Mensual por Operador</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">P&L Mensual (%) — Desglose por Operador</div>
-      <div style="padding:14px 18px;position:relative;height:220px">
-        <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
-      </div>
-
-    </div>
-
         ${m.openTrades.length ? `
     <div class="sec"><span class="sec-n">05</span><span class="sec-t">Operaciones Abiertas</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-body">${openHTML}</div></div>` : ''}
@@ -980,6 +1021,39 @@ function renderDash(m) {
         }
       });
       activeCharts.push(rwC);
+    }
+
+    // Frequency chart
+    const freqCtx = document.getElementById('freqChart');
+    if (freqCtx && m.weeklyFreq && m.weeklyFreq.length) {
+      const fc = new Chart(freqCtx, {
+        type: 'bar',
+        data: {
+          labels: m.weeklyFreq.map(w => w.key.replace('-W','/W')),
+          datasets: [{
+            label: 'Ops',
+            data: m.weeklyFreq.map(w => w.ops),
+            backgroundColor: m.weeklyFreq.map(w => {
+              const wr = w.ops > 0 ? w.tp/w.ops : 0;
+              return wr >= 0.7 ? '#00D49A88' : wr >= 0.5 ? '#FFB54788' : '#FF4C5E88';
+            }),
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: ctx => {
+              const w = m.weeklyFreq[ctx.dataIndex];
+              return [ctx.parsed.y+' ops', w.tp+'✓ '+w.sl+'✗'];
+            }}}},
+          scales: {
+            x: { ticks: { color: '#5A7A9A', font: { size: 8 }, maxRotation: 45 }, grid: { color: 'rgba(128,128,128,0.06)' } },
+            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(128,128,128,0.06)' } }
+          }
+        }
+      });
+      activeCharts.push(fc);
     }
 
     // Monthly WR panel - polished column layout
