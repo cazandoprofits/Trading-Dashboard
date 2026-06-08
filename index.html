@@ -420,6 +420,7 @@ function compute(rows) {
   });
   const posMonths = monthlyPnls.filter(p => p > 0).length;
   const pctPosMonths = monthlyPnls.length > 0 ? posMonths / monthlyPnls.length * 100 : 0;
+  const avgMonthlyPnl = monthlyPnls.length > 0 ? monthlyPnls.reduce((a,b)=>a+b,0)/monthlyPnls.length : 0;
 
   // Mejor y peor mes
   const monthlyLabels = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1);
@@ -510,7 +511,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -625,9 +626,9 @@ function renderDash(m) {
   <div class="kpis" style="margin-top:9px">
     ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
       ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['% Meses Positivos', m.pctPosMonths.toFixed(0)+'%', m.posMonths+' de '+m.nMonths+' meses en positivo', m.pctPosMonths >= 75 ? 'var(--green)' : m.pctPosMonths >= 50 ? 'var(--yellow)' : 'var(--red)'],
+      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
       ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
-      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', 'var(--red)'],
+      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
       ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
     ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
   </div>`;
