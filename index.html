@@ -6,6 +6,7 @@
 <title>Trading Dashboard · En Vivo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -905,19 +906,56 @@ function renderDash(m) {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                title: (items) => `Operación #${items[0].label}`,
+                title: (items) => 'Operación #'+items[0].label,
                 label: (ctx) => {
                   const op = ctx.dataset.label;
                   const eq = ctx.parsed.y;
                   const data = m.opEquity[op]?.[ctx.dataIndex];
                   const sign = data?.pnlV >= 0 ? '+' : '';
-                  return [
-                    `${op}`,
-                    `Equity: ${eq.toFixed(2)}%`,
-                    data ? `Op: ${sign}${data.pnlV.toFixed(1)}% · ${data.res}` : ''
-                  ].filter(Boolean);
+                  return [op, 'Equity: '+eq.toFixed(2)+'%', data ? 'Op: '+sign+data.pnlV.toFixed(1)+'% · '+data.res : ''].filter(Boolean);
                 }
               }
+            },
+            annotation: {
+              annotations: (() => {
+                const ann = {};
+                // Build month boundary annotations from sorted data
+                const opSorted = m.opEquity[m.allOps[0]] || [];
+                let prevMonth = null;
+                opSorted.forEach((e, i) => {
+                  // Get month from equity data - approximate using index
+                  const globalIdx = m.equity.findIndex(eq => eq.n === e.n);
+                  if (globalIdx < 0) return;
+                  const sorted = m.equity;
+                  // We'll use the month separators from monthlyLabels
+                });
+                // Use monthly data to find boundaries
+                let cumOps = 0;
+                m.monthly.forEach((row, mi) => {
+                  const monthOps = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp||0) + (row.ops[op]?.sl||0), 0);
+                  if (mi < m.monthly.length - 1 && monthOps > 0) {
+                    cumOps += monthOps;
+                    ann['month'+mi] = {
+                      type: 'line',
+                      xMin: cumOps - 0.5,
+                      xMax: cumOps - 0.5,
+                      borderColor: 'rgba(128,128,128,0.35)',
+                      borderWidth: 1.5,
+                      borderDash: [5, 4],
+                      label: {
+                        display: true,
+                        content: m.monthly[mi+1]?.label || '',
+                        position: 'start',
+                        color: '#5A7A9A',
+                        font: { size: 9 },
+                        backgroundColor: 'transparent',
+                        yAdjust: -8
+                      }
+                    };
+                  }
+                });
+                return ann;
+              })()
             }
           },
           scales: {
