@@ -116,7 +116,7 @@
   .heatrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .heat-wrap { flex: 1; height: 28px; background: var(--border); border-radius: 5px; overflow: hidden; position: relative; }
   .heat-bar { height: 100%; border-radius: 5px; }
-  .heat-lbl { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--text); font-weight: 600; }
+  .heat-lbl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text); font-weight: 600; font-family: 'Inter','DM Sans',sans-serif; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; display: flex; align-items: center; gap: 2px; }
 
   /* SEQUENCE */
   .seq { display: flex; flex-wrap: wrap; gap: 5px; padding: 14px 18px; }
@@ -745,7 +745,7 @@ function renderDash(m) {
     return `<div class="heatrow">
       <span style="font-size:11px;font-weight:500;min-width:82px">${d.dia}</span>
       <div class="heat-wrap"><div class="heat-bar" style="width:${d.wr}%;background:${col}66"></div>
-        <span class="heat-lbl">${d.ops} ops · ${d.tp}✓ ${d.sl}✗</span></div>
+        <span class="heat-lbl">${d.tp}<span style="color:#00D49A;font-size:10px;font-weight:600"> TP</span>&nbsp;&nbsp;${d.sl}<span style="color:#FF4C5E;font-size:10px;font-weight:600"> SL</span>&nbsp;&nbsp;<span style="color:var(--textSub);font-weight:400;font-size:10px">${d.ops} ops</span></span></div>
       <span style="font-size:12px;font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${col};min-width:38px;text-align:right">${d.wr.toFixed(0)}%</span>
       <span style="font-size:11px;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${d.pnl >= 0 ? '#00D49A' : '#FF4C5E'};min-width:48px;text-align:right">${pct(d.pnl)}</span>
     </div>`;
