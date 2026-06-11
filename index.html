@@ -569,7 +569,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, monthRows, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -671,45 +671,6 @@ function renderDash(m) {
     currentFilter === 'D&S' ? 'D&S — Operaciones conjuntas' :
     `${currentFilter} (incluye D&S)`;
   document.getElementById('topSub').textContent = `${filterLabel} · ${m.closed} cerradas · ${m.open} abiertas · ${new Date().toLocaleString('es-ES')}`;
-
-  const kpiHTML = `<div class="kpis">
-    ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
-      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
-      ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
-      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Ganancia / Trade', (m.expectancyEur>=0?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.expectancyEur)+'\u20ac', 'Expectativa media \xb7 base 100k', m.expectancyEur>=0?'var(--green)':'var(--red)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>
-  <div class="kpis" style="margin-top:9px">
-    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
-      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
-      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
-      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>`;
-
-  const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
-    ? `<div style="font-size:10px;color:var(--yellow);background:rgba(255,181,71,0.1);border:0.5px solid rgba(255,181,71,0.2);border-radius:5px;padding:4px 8px;margin-bottom:10px">
-        ⚠ Incluye ops conjuntas D&S
-       </div>` : '';
-  const opCards = m.allOps.map(op => {
-    const o = m.ops[op] || {};
-    const dsCount = m.allOps.includes('D&S') ? (m.ops['D&S']?.ops || 0) : 0;
-    const showDSNote = (currentFilter === 'all') && op !== 'D&S' && dsCount > 0;
-    return `<div class="card" style="border-color:${och(op)}44">
-      <div class="card-h"><span class="card-t" style="color:${oc(op)}">${op}</span><span class="badge" style="background:${och(op)}22;color:${oc(op)}">${o.ops || 0} ops</span></div>
-      ${showDSNote ? `<div style="font-size:10px;color:var(--textSub);margin-bottom:8px">Solo ops individuales · D&S se analiza por separado</div>` : ''}
-      ${currentFilter !== 'all' && op !== 'D&S' ? `<div style="font-size:10px;color:rgba(255,181,71,0.9);margin-bottom:8px">Incluye ${dsCount} ops D&S</div>` : ''}
-      ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
-        ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
-        ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
-        ['TP / SL', `${o.tp || 0} / ${o.sl || 0}`, 'var(--textSub)']]
-        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
-    </div>`;
-  }).join('');
 
   // Transposed matrix: operators as rows, months as columns
   const monthLabels = m.monthly.map(row => row.label);
@@ -850,7 +811,7 @@ function renderDash(m) {
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
 
-      <div style="overflow-x:auto"><table class="tbl" id="monthlyMatrix"></table></div>
+      <div style="overflow-x:auto"><table class="tbl">${monthRows}</table></div>
     </div>
 
     <div class="sec"><span class="sec-n">03</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
@@ -1118,10 +1079,6 @@ function renderDash(m) {
       });
       activeCharts.push(c3);
     }
-
-    // Monthly matrix (transposed)
-    const monthlyMatrix = document.getElementById('monthlyMatrix');
-    if (monthlyMatrix) monthlyMatrix.innerHTML = m.monthRows;
 
     // Pair analysis table
     const pairTable = document.getElementById('pairTable');
@@ -1461,3 +1418,44 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
+  const kpiHTML = `<div class="kpis">
+    ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
+      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
+      ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
+      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
+      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
+      ['Ganancia / Trade', (m.expectancyEur>=0?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.expectancyEur)+'\u20ac', 'Expectativa media \xb7 base 100k', m.expectancyEur>=0?'var(--green)':'var(--red)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
+  </div>
+  <div class="kpis" style="margin-top:9px">
+    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
+      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
+      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
+      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
+  </div>`;
+
+  const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
+    ? `<div style="font-size:10px;color:var(--yellow);background:rgba(255,181,71,0.1);border:0.5px solid rgba(255,181,71,0.2);border-radius:5px;padding:4px 8px;margin-bottom:10px">
+        ⚠ Incluye ops conjuntas D&S
+       </div>` : '';
+  const opCards = m.allOps.map(op => {
+    const o = m.ops[op] || {};
+    const dsCount = m.allOps.includes('D&S') ? (m.ops['D&S']?.ops || 0) : 0;
+    const showDSNote = (currentFilter === 'all') && op !== 'D&S' && dsCount > 0;
+    return `<div class="card" style="border-color:${och(op)}44">
+      <div class="card-h"><span class="card-t" style="color:${oc(op)}">${op}</span><span class="badge" style="background:${och(op)}22;color:${oc(op)}">${o.ops || 0} ops</span></div>
+      ${showDSNote ? `<div style="font-size:10px;color:var(--textSub);margin-bottom:8px">Solo ops individuales · D&S se analiza por separado</div>` : ''}
+      ${currentFilter !== 'all' && op !== 'D&S' ? `<div style="font-size:10px;color:rgba(255,181,71,0.9);margin-bottom:8px">Incluye ${dsCount} ops D&S</div>` : ''}
+      ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
+        ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
+        ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
+        ['TP / SL', `${o.tp || 0} / ${o.sl || 0}`, 'var(--textSub)']]
+        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
+    </div>`;
+  }).join('');
+
+
