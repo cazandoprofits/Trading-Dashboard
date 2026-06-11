@@ -116,7 +116,7 @@
   .heatrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .heat-wrap { flex: 1; height: 28px; background: var(--border); border-radius: 5px; overflow: hidden; position: relative; }
   .heat-bar { height: 100%; border-radius: 5px; }
-  .heat-lbl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text); font-weight: 600; font-family: 'Inter','DM Sans',sans-serif; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; display: flex; align-items: center; gap: 2px; }
+  .heat-lbl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--textSub); font-weight: 500; font-family: 'Inter','DM Sans',sans-serif; font-variant-numeric: tabular-nums; }
 
   /* SEQUENCE */
   .seq { display: flex; flex-wrap: wrap; gap: 5px; padding: 14px 18px; }
@@ -693,7 +693,7 @@ function renderDash(m) {
       m.monthly.forEach(function(row) {
         var od = row.ops[op];
         if (od) { opTp += od.tp; opSl += od.sl; opPnl += od.pnl; }
-        html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + (od ? od.tp + "✓ " + od.sl + "✗" : "—") + "</td>";
+        html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + (od ? od.tp + " TP  " + od.sl + " SL" : "—") + "</td>";
         html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + (od ? pnlColor(od.pnl) : "var(--muted)") + '">' + (od ? pct(od.pnl) : "—") + "</td>";
       });
       var opWr = (opTp + opSl) > 0 ? opTp / (opTp + opSl) * 100 : null;
@@ -715,7 +715,7 @@ function renderDash(m) {
       });
       gTp += mTp; gSl += mSl; gPnl += mPnl;
       var mWr = (mTp + mSl) > 0 ? mTp / (mTp + mSl) * 100 : null;
-      html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + mTp + "✓ " + mSl + "✗</td>";
+      html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + mTp + " TP  " + mSl + " SL</td>";
       html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(mPnl) + '">' + pct(mPnl) + "</td>";
     });
     var gWr = (gTp + gSl) > 0 ? gTp / (gTp + gSl) * 100 : null;
@@ -745,7 +745,7 @@ function renderDash(m) {
     return `<div class="heatrow">
       <span style="font-size:11px;font-weight:500;min-width:82px">${d.dia}</span>
       <div class="heat-wrap"><div class="heat-bar" style="width:${d.wr}%;background:${col}66"></div>
-        <span class="heat-lbl">${d.tp}<span style="color:#00D49A;font-size:10px;font-weight:600"> TP</span>&nbsp;&nbsp;${d.sl}<span style="color:#FF4C5E;font-size:10px;font-weight:600"> SL</span>&nbsp;&nbsp;<span style="color:var(--textSub);font-weight:400;font-size:10px">${d.ops} ops</span></span></div>
+        <span class="heat-lbl">${d.tp}&#10003; · ${d.sl}&#10007; · ${d.ops} ops</span></div>
       <span style="font-size:12px;font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${col};min-width:38px;text-align:right">${d.wr.toFixed(0)}%</span>
       <span style="font-size:11px;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${d.pnl >= 0 ? '#00D49A' : '#FF4C5E'};min-width:48px;text-align:right">${pct(d.pnl)}</span>
     </div>`;
@@ -800,7 +800,7 @@ function renderDash(m) {
       ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
         ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
         ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
-        ['TP / SL', `${o.tp || 0} / ${o.sl || 0}`, 'var(--textSub)']]
+        ['TP / SL', (o.tp||0)+' TP  '+(o.sl||0)+' SL', 'var(--textSub)']]
         .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
     </div>`;
   }).join('');
@@ -1240,7 +1240,7 @@ function renderDash(m) {
               label: ctx => {
                 if (ctx.dataset.label === 'Ops semana') {
                   const w = m.weeklyFreq[ctx.dataIndex];
-                  return [ctx.parsed.y+' ops · '+w.tp+'✓ '+w.sl+'✗'];
+                  return [ctx.parsed.y+' ops · '+w.tp+' TP  '+w.sl+' SL'];
                 }
                 if (ctx.dataset.label === 'Media móvil') return 'Media móvil: '+ctx.parsed.y;
                 return 'Media global: '+ctx.parsed.y;
@@ -1365,7 +1365,7 @@ function renderDash(m) {
             <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
               <div style="width:${barW}%;height:100%;background:${wrCol};border-radius:3px"></div>
             </div>
-            <span style="font-size:10px;color:var(--muted)">${tp} TP · ${sl} SL</span>
+            <span style="font-size:10px;color:var(--muted)">${tp} TP  ${sl} SL</span>
           </div>`;
         }).filter(Boolean);
         if (!opRows.length) return;
