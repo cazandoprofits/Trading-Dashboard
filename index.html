@@ -301,7 +301,11 @@ function compute(rows) {
   const rr = r => { const v = parseFloat(r['RR Final']); return isNaN(v) ? 0 : v; };
   const risk = r => { const v = parseFloat(String(r.Riesgo || '1.5').replace('%', '')); return isNaN(v) ? 1.5 : v; };
   const pnl = r => rr(r) * risk(r);
-  const sorted = [...closed].sort((a, b) => (parseDate(a.Fecha) || 0) - (parseDate(b.Fecha) || 0));
+  const sorted = [...closed].sort((a, b) => {
+    const da = (parseDate(a.Fecha) || 0), db = (parseDate(b.Fecha) || 0);
+    if (da - db !== 0) return da - db;
+    return (parseFloat(a['N·']||a['N'])||0) - (parseFloat(b['N·']||b['N'])||0);
+  });
 
   const tp = closed.filter(isTP).length, sl = closed.filter(isSL).length;
   const wr = closed.length ? tp / closed.length * 100 : 0;
@@ -732,7 +736,7 @@ function renderDash(m) {
     <!-- SECCIÓN: Simulación €100k -->
     <div class="sec"><span class="sec-n">01</span><span class="sec-t">Simulación — Evolución de una Cuenta de 100.000€</span><div class="sec-l"></div></div>
     <div class="panel">
-      <div class="panel-h">Evolución del Capital — Base 100.000€ con Riesgo Fijo ${(m.equity[0]?.pnlV !== undefined ? '1.5' : '1.5')}% por Operación</div>
+      <div class="panel-h">Evolución del Capital — Base 100.000€ · Riesgo Fijo 1.5% · ${m.accountAgeDays} días de operativa</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 18px 0">
         ${[
           ['Capital Inicial', '100.000€', 'var(--text)'],
