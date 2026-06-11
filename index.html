@@ -418,6 +418,19 @@ function compute(rows) {
   const monthlyBarData = monthlyBar();
   
 
+  // Edad de la cuenta (primer trade → hoy)
+  const allDates = data.map(r => parseDate(r.Fecha)).filter(Boolean);
+  const firstDate = allDates.length ? new Date(Math.min(...allDates)) : null;
+  const lastDate = allDates.length ? new Date(Math.max(...allDates)) : null;
+  const today = new Date();
+  const accountAgeDays = firstDate ? Math.floor((today - firstDate) / 86400000) : 0;
+  const accountAgeMonths = firstDate ? ((today.getFullYear() - firstDate.getFullYear()) * 12 + (today.getMonth() - firstDate.getMonth())) : 0;
+  const accountAgeLabel = accountAgeDays > 0 ? (accountAgeDays < 30 ? accountAgeDays+' días' : accountAgeMonths < 12 ? accountAgeMonths+' meses' : Math.floor(accountAgeMonths/12)+'a '+(accountAgeMonths%12)+'m') : '—';
+
+  // Rentabilidad anualizada real (CAGR)
+  const yearsElapsed = accountAgeDays > 0 ? accountAgeDays / 365.25 : 1;
+  const cagr = yearsElapsed > 0 ? (Math.pow(euroAcc / 100000, 1 / yearsElapsed) - 1) * 100 : 0;
+
   // % Meses positivos
   const monthlyPnls = Object.values(monthly).map(m => {
     return Object.values(m.ops).reduce((s, o) => s + (o.pnl||0), 0);
@@ -515,7 +528,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -720,7 +733,7 @@ function renderDash(m) {
     <div class="sec"><span class="sec-n">01</span><span class="sec-t">Simulación — Evolución de una Cuenta de 100.000€</span><div class="sec-l"></div></div>
     <div class="panel">
       <div class="panel-h">Evolución del Capital — Base 100.000€ con Riesgo Fijo ${(m.equity[0]?.pnlV !== undefined ? '1.5' : '1.5')}% por Operación</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 18px 0">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 18px 0">
         <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
           <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Capital Inicial</p>
           <p style="margin:4px 0 0;font-size:20px;font-weight:600;color:var(--text);font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">100.000€</p>
@@ -738,10 +751,22 @@ function renderDash(m) {
           </p>
         </div>
         <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rendimiento</p>
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rendimiento Total</p>
           <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.netPnl >= 0 ? 'var(--green)' : 'var(--red)'}">
             ${m.netPnl >= 0 ? '+' : ''}${m.netPnl.toFixed(1)}%
           </p>
+        </div>
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rent. Anualizada</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.cagr >= 0 ? 'var(--green)' : 'var(--red)'}">
+            ${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%
+          </p>
+          <p style="margin:2px 0 0;font-size:10px;color:var(--textSub)">CAGR sobre capital inicial</p>
+        </div>
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Edad de la Cuenta</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:var(--text)">${m.accountAgeLabel}</p>
+          <p style="margin:2px 0 0;font-size:10px;color:var(--textSub)">Desde primera operación</p>
         </div>
       </div>
       <div style="padding:14px 18px;position:relative;height:240px;min-height:240px">
