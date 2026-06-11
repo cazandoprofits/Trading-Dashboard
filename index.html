@@ -315,7 +315,9 @@ function compute(rows) {
   const equity = sorted.map(r => {
     eq += pnl(r); if (eq > peak) peak = eq;
     const dd = (peak - eq) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDPeak = peak; maxDDValley = eq; }
-    return { n: `N·${r['N·'] || r['N']}`, eq: +eq.toFixed(2), dd: +dd.toFixed(2), op: r.Operador, res: rr(r) > 0 ? 'TP' : rr(r) < 0 ? 'SL' : 'BE', pnlV: +pnl(r).toFixed(2) };
+    const pnlPct = pnl(r) / 100;
+    euroAcc = +(euroAcc * (1 + pnlPct)).toFixed(2);
+    return { n: `N·${r['N·'] || r['N']}`, eq: +eq.toFixed(2), dd: +dd.toFixed(2), op: r.Operador, res: rr(r) > 0 ? 'TP' : rr(r) < 0 ? 'SL' : 'BE', pnlV: +pnl(r).toFixed(2), euroVal: euroAcc };
   });
 
   // Sharpe y Sortino sobre retornos MENSUALES anualizados (×√12)
@@ -943,7 +945,18 @@ function renderDash(m) {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                title: (items) => 'Operación #'+items[0].label,
+                title: (items) => {
+                  const idx = items[0].dataIndex;
+                  // Find which month this op belongs to
+                  let cumOps = 0;
+                  let monthLabel = '';
+                  for (const row of m.monthly) {
+                    const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
+                    cumOps += mOps;
+                    if (idx < cumOps) { monthLabel = row.label; break; }
+                  }
+                  return 'Op #'+items[0].label + (monthLabel ? ' · '+monthLabel : '');
+                },
                 label: (ctx) => {
                   const op = ctx.dataset.label;
                   const eq = ctx.parsed.y;
@@ -979,15 +992,7 @@ function renderDash(m) {
                       borderColor: 'rgba(128,128,128,0.35)',
                       borderWidth: 1.5,
                       borderDash: [5, 4],
-                      label: {
-                        display: true,
-                        content: m.monthly[mi+1]?.label || '',
-                        position: 'end',
-                        color: '#5A7A9A',
-                        font: { size: 9 },
-                        backgroundColor: 'rgba(0,0,0,0)',
-                        yAdjust: 8
-                      }
+                      label: { display: false }
                     };
                   }
                 });
@@ -1194,8 +1199,7 @@ function renderDash(m) {
           euroAnn['m'+mi] = {
             type: 'line', xMin: cumOps2 - 0.5, xMax: cumOps2 - 0.5,
             borderColor: 'rgba(128,128,128,0.3)', borderWidth: 1.5, borderDash: [5,4],
-            label: { display: true, content: m.monthly[mi+1]?.label||'', position: 'end',
-              color: '#5A7A9A', font: { size: 9 }, backgroundColor: 'rgba(0,0,0,0)', yAdjust: 8 }
+            label: { display: false }
           };
         }
       });
@@ -1222,7 +1226,16 @@ function renderDash(m) {
             legend: { display: false },
             annotation: { annotations: euroAnn },
             tooltip: { callbacks: {
-              title: items => 'Op #'+items[0].label+' · '+(m.equity[items[0].dataIndex]?.n||''),
+              title: items => {
+                const idx = items[0].dataIndex;
+                let cumOps = 0, monthLabel = '';
+                for (const row of m.monthly) {
+                  const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
+                  cumOps += mOps;
+                  if (idx < cumOps) { monthLabel = row.label; break; }
+                }
+                return 'Op #'+items[0].label+' · '+(m.equity[idx]?.n||'')+(monthLabel?' · '+monthLabel:'');
+              },
               label: ctx => {
                 const e = m.equity[ctx.dataIndex];
                 const val = ctx.parsed.y;
