@@ -569,7 +569,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, monthRows, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -711,21 +711,59 @@ function renderDash(m) {
     </div>`;
   }).join('');
 
-  const monthRows = m.monthly.map(row => {
-    const total = m.allOps.reduce((s, op) => s + (row.ops[op]?.pnl || 0), 0);
-    const monthTp = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp || 0), 0);
-    const monthSl = m.allOps.reduce((s, op) => s + (row.ops[op]?.sl || 0), 0);
-    const monthTotal = monthTp + monthSl;
-    const monthWr = monthTotal > 0 ? (monthTp / monthTotal * 100) : null;
-    const wrColor = monthWr === null ? 'var(--muted)' : monthWr >= 70 ? 'var(--green)' : monthWr >= 50 ? 'var(--yellow)' : 'var(--red)';
-    return `<tr><td style="font-weight:600">${row.label}</td>
-      ${m.allOps.map(op => { const od = row.ops[op]; return `
-        <td class="r" style="font-size:11px;color:var(--textSub)">${od ? `${od.tp}✓ ${od.sl}✗` : '—'}</td>
-        <td class="r" style="font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${od ? pnlColor(od.pnl) : 'var(--muted)'}">${od ? pct(od.pnl) : '—'}</td>`; }).join('')}
-      <td class="r" style="font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${pnlColor(total)}">${pct(total)}</td>
-      <td class="r" style="font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${wrColor}">${monthWr !== null ? monthWr.toFixed(0)+'%' : '—'}</td>
-    </tr>`;
-  }).join('');
+  // Transposed matrix: operators as rows, months as columns
+  const monthLabels = m.monthly.map(row => row.label);
+  const monthRows = (() => {
+    const tdStyle = (val, isNum) => isNum
+      ? 'font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(val)
+      : 'font-size:11px;color:var(--textSub)';
+
+    // Header row: months
+    let html = '<thead><tr>';
+    html += '<th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Operador</th>';
+    monthLabels.forEach(lbl => {
+      html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)" colspan="2">'+lbl+'</th>';
+    });
+    html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Total</th>';
+    html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">WR</th>';
+    html += '</tr></thead><tbody>';
+
+    // One row per operator
+    m.allOps.forEach(op => {
+      html += '<tr style="border-top:0.5px solid var(--border)">';
+      html += '<td style="padding:9px 14px;font-weight:600;color:'+oc(op)+'">'+op+'</td>';
+      let opTotalTp = 0, opTotalSl = 0, opTotalPnl = 0;
+      m.monthly.forEach(row => {
+        const od = row.ops[op];
+        if (od) { opTotalTp += od.tp; opTotalSl += od.sl; opTotalPnl += od.pnl; }
+        html += '<td class="r" style="padding:9px 14px;font-size:11px;color:var(--textSub);border-left:0.5px solid var(--border)">'+(od ? od.tp+'✓ '+od.sl+'✗' : '—')+'</td>';
+        html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+(od?pnlColor(od.pnl):'var(--muted)')+'">'+(od?pct(od.pnl):'—')+'</td>';
+      });
+      const opWr = (opTotalTp+opTotalSl)>0?(opTotalTp/(opTotalTp+opTotalSl)*100):null;
+      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(opTotalPnl)+'">'+pct(opTotalPnl)+'</td>';
+      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;color:'+(opWr!==null?opWr>=70?'var(--green)':opWr>=50?'var(--yellow)':'var(--red)':'var(--muted)')+'">'+( opWr!==null?opWr.toFixed(0)+'%':'—')+'</td>';
+      html += '</tr>';
+    });
+
+    // Total row
+    html += '<tr style="border-top:1px solid var(--borderHi)">';
+    html += '<td style="padding:9px 14px;font-weight:600;color:var(--text)">Global</td>';
+    let grandTp = 0, grandSl = 0, grandPnl = 0;
+    m.monthly.forEach(row => {
+      const total = m.allOps.reduce((s, op) => s + (row.ops[op]?.pnl || 0), 0);
+      const mTp = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp || 0), 0);
+      const mSl = m.allOps.reduce((s, op) => s + (row.ops[op]?.sl || 0), 0);
+      grandTp += mTp; grandSl += mSl; grandPnl += total;
+      const mWr = (mTp+mSl)>0?(mTp/(mTp+mSl)*100):null;
+      html += '<td class="r" style="padding:9px 14px;font-size:11px;color:var(--textSub);border-left:0.5px solid var(--border)">'+mTp+'✓ '+mSl+'✗</td>';
+      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(total)+'">'+pct(total)+'</td>';
+    });
+    const grandWr = (grandTp+grandSl)>0?(grandTp/(grandTp+grandSl)*100):null;
+    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(grandPnl)+'">'+pct(grandPnl)+'</td>';
+    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;color:'+(grandWr!==null?grandWr>=70?'var(--green)':grandWr>=50?'var(--yellow)':'var(--red)':'var(--muted)')+'">'+( grandWr!==null?grandWr.toFixed(0)+'%':'—')+'</td>';
+    html += '</tr></tbody>';
+    return html;
+  })();
 
   const tipoCards = Object.entries(m.tipos).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([tipo, t]) => {
     const wr2 = t.ops ? t.tp / t.ops * 100 : 0;
@@ -812,10 +850,7 @@ function renderDash(m) {
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
 
-      <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr><th>Mes</th>${m.allOps.map(op => `<th class="r" style="color:${oc(op)}" colspan="2">${op}</th>`).join('')}<th class="r">Total</th><th class="r" style="color:var(--textSub)">WR Mes</th></tr></thead>
-        <tbody>${monthRows}</tbody>
-      </table></div>
+      <div style="overflow-x:auto"><table class="tbl" id="monthlyMatrix"></table></div>
     </div>
 
     <div class="sec"><span class="sec-n">03</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
@@ -1083,6 +1118,10 @@ function renderDash(m) {
       });
       activeCharts.push(c3);
     }
+
+    // Monthly matrix (transposed)
+    const monthlyMatrix = document.getElementById('monthlyMatrix');
+    if (monthlyMatrix) monthlyMatrix.innerHTML = m.monthRows;
 
     // Pair analysis table
     const pairTable = document.getElementById('pairTable');
