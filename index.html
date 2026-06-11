@@ -673,56 +673,55 @@ function renderDash(m) {
   document.getElementById('topSub').textContent = `${filterLabel} · ${m.closed} cerradas · ${m.open} abiertas · ${new Date().toLocaleString('es-ES')}`;
 
   // Transposed matrix: operators as rows, months as columns
-  const monthLabels = m.monthly.map(row => row.label);
-  const monthRows = (() => {
-    const tdStyle = (val, isNum) => isNum
-      ? 'font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(val)
-      : 'font-size:11px;color:var(--textSub)';
-
-    // Header row: months
-    let html = '<thead><tr>';
+  const monthLabels = m.monthly.map(function(row) { return row.label; });
+  const monthRows = (function() {
+    var html = "<thead><tr>";
     html += '<th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Operador</th>';
-    monthLabels.forEach(lbl => {
-      html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)" colspan="2">'+lbl+'</th>';
+    monthLabels.forEach(function(lbl) {
+      html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)" colspan="2">' + lbl + "</th>";
     });
     html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Total</th>';
     html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">WR</th>';
-    html += '</tr></thead><tbody>';
+    html += "</tr></thead><tbody>";
+    var numStyle = "font-weight:700;font-family:Inter,sans-serif;font-variant-numeric:tabular-nums";
+    var subStyle = "font-size:11px;color:var(--textSub)";
 
-    // One row per operator
-    m.allOps.forEach(op => {
+    m.allOps.forEach(function(op) {
       html += '<tr style="border-top:0.5px solid var(--border)">';
-      html += '<td style="padding:9px 14px;font-weight:600;color:'+oc(op)+'">'+op+'</td>';
-      let opTotalTp = 0, opTotalSl = 0, opTotalPnl = 0;
-      m.monthly.forEach(row => {
-        const od = row.ops[op];
-        if (od) { opTotalTp += od.tp; opTotalSl += od.sl; opTotalPnl += od.pnl; }
-        html += '<td class="r" style="padding:9px 14px;font-size:11px;color:var(--textSub);border-left:0.5px solid var(--border)">'+(od ? od.tp+'✓ '+od.sl+'✗' : '—')+'</td>';
-        html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+(od?pnlColor(od.pnl):'var(--muted)')+'">'+(od?pct(od.pnl):'—')+'</td>';
+      html += '<td style="padding:9px 14px;font-weight:600;color:' + oc(op) + '">' + op + "</td>";
+      var opTp = 0, opSl = 0, opPnl = 0;
+      m.monthly.forEach(function(row) {
+        var od = row.ops[op];
+        if (od) { opTp += od.tp; opSl += od.sl; opPnl += od.pnl; }
+        html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + (od ? od.tp + "✓ " + od.sl + "✗" : "—") + "</td>";
+        html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + (od ? pnlColor(od.pnl) : "var(--muted)") + '">' + (od ? pct(od.pnl) : "—") + "</td>";
       });
-      const opWr = (opTotalTp+opTotalSl)>0?(opTotalTp/(opTotalTp+opTotalSl)*100):null;
-      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(opTotalPnl)+'">'+pct(opTotalPnl)+'</td>';
-      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;color:'+(opWr!==null?opWr>=70?'var(--green)':opWr>=50?'var(--yellow)':'var(--red)':'var(--muted)')+'">'+( opWr!==null?opWr.toFixed(0)+'%':'—')+'</td>';
-      html += '</tr>';
+      var opWr = (opTp + opSl) > 0 ? opTp / (opTp + opSl) * 100 : null;
+      html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(opPnl) + '">' + pct(opPnl) + "</td>";
+      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:Inter,sans-serif;color:' + (opWr !== null ? opWr >= 70 ? "var(--green)" : opWr >= 50 ? "var(--yellow)" : "var(--red)" : "var(--muted)") + '">' + (opWr !== null ? opWr.toFixed(0) + "%" : "—") + "</td>";
+      html += "</tr>";
     });
 
-    // Total row
+    // Global row
     html += '<tr style="border-top:1px solid var(--borderHi)">';
     html += '<td style="padding:9px 14px;font-weight:600;color:var(--text)">Global</td>';
-    let grandTp = 0, grandSl = 0, grandPnl = 0;
-    m.monthly.forEach(row => {
-      const total = m.allOps.reduce((s, op) => s + (row.ops[op]?.pnl || 0), 0);
-      const mTp = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp || 0), 0);
-      const mSl = m.allOps.reduce((s, op) => s + (row.ops[op]?.sl || 0), 0);
-      grandTp += mTp; grandSl += mSl; grandPnl += total;
-      const mWr = (mTp+mSl)>0?(mTp/(mTp+mSl)*100):null;
-      html += '<td class="r" style="padding:9px 14px;font-size:11px;color:var(--textSub);border-left:0.5px solid var(--border)">'+mTp+'✓ '+mSl+'✗</td>';
-      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(total)+'">'+pct(total)+'</td>';
+    var gTp = 0, gSl = 0, gPnl = 0;
+    m.monthly.forEach(function(row) {
+      var mTp = 0, mSl = 0, mPnl = 0;
+      m.allOps.forEach(function(op) {
+        mTp += row.ops[op] ? row.ops[op].tp : 0;
+        mSl += row.ops[op] ? row.ops[op].sl : 0;
+        mPnl += row.ops[op] ? row.ops[op].pnl : 0;
+      });
+      gTp += mTp; gSl += mSl; gPnl += mPnl;
+      var mWr = (mTp + mSl) > 0 ? mTp / (mTp + mSl) * 100 : null;
+      html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + mTp + "✓ " + mSl + "✗</td>";
+      html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(mPnl) + '">' + pct(mPnl) + "</td>";
     });
-    const grandWr = (grandTp+grandSl)>0?(grandTp/(grandTp+grandSl)*100):null;
-    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;font-variant-numeric:tabular-nums;color:'+pnlColor(grandPnl)+'">'+pct(grandPnl)+'</td>';
-    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:\'Inter\',sans-serif;color:'+(grandWr!==null?grandWr>=70?'var(--green)':grandWr>=50?'var(--yellow)':'var(--red)':'var(--muted)')+'">'+( grandWr!==null?grandWr.toFixed(0)+'%':'—')+'</td>';
-    html += '</tr></tbody>';
+    var gWr = (gTp + gSl) > 0 ? gTp / (gTp + gSl) * 100 : null;
+    html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(gPnl) + '">' + pct(gPnl) + "</td>";
+    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:Inter,sans-serif;color:' + (gWr !== null ? gWr >= 70 ? "var(--green)" : gWr >= 50 ? "var(--yellow)" : "var(--red)" : "var(--muted)") + '">' + (gWr !== null ? gWr.toFixed(0) + "%" : "—") + "</td>";
+    html += "</tr></tbody>";
     return html;
   })();
 
@@ -765,6 +764,48 @@ function renderDash(m) {
       <span style="color:${r.Dirección === 'Alcista' ? 'var(--green)' : 'var(--red)'}">${r.Dirección || '—'}</span>
       <span style="color:var(--textSub);font-size:11px;margin-left:auto">${r.Fecha || ''}</span>
     </div>`).join('') : '<p style="font-size:12px;color:var(--textSub)">Sin operaciones abiertas actualmente</p>';
+
+
+  const kpiHTML = `<div class="kpis">
+    ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
+      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
+      ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
+      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
+      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
+      ['Ganancia / Trade', (m.expectancyEur>=0?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.expectancyEur)+'\u20ac', 'Expectativa media \xb7 base 100k', m.expectancyEur>=0?'var(--green)':'var(--red)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
+  </div>
+  <div class="kpis" style="margin-top:9px">
+    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
+      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
+      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
+      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
+      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
+    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
+  </div>`;
+
+  const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
+    ? `<div style="font-size:10px;color:var(--yellow);background:rgba(255,181,71,0.1);border:0.5px solid rgba(255,181,71,0.2);border-radius:5px;padding:4px 8px;margin-bottom:10px">
+        ⚠ Incluye ops conjuntas D&S
+       </div>` : '';
+  const opCards = m.allOps.map(op => {
+    const o = m.ops[op] || {};
+    const dsCount = m.allOps.includes('D&S') ? (m.ops['D&S']?.ops || 0) : 0;
+    const showDSNote = (currentFilter === 'all') && op !== 'D&S' && dsCount > 0;
+    return `<div class="card" style="border-color:${och(op)}44">
+      <div class="card-h"><span class="card-t" style="color:${oc(op)}">${op}</span><span class="badge" style="background:${och(op)}22;color:${oc(op)}">${o.ops || 0} ops</span></div>
+      ${showDSNote ? `<div style="font-size:10px;color:var(--textSub);margin-bottom:8px">Solo ops individuales · D&S se analiza por separado</div>` : ''}
+      ${currentFilter !== 'all' && op !== 'D&S' ? `<div style="font-size:10px;color:rgba(255,181,71,0.9);margin-bottom:8px">Incluye ${dsCount} ops D&S</div>` : ''}
+      ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
+        ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
+        ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
+        ['TP / SL', `${o.tp || 0} / ${o.sl || 0}`, 'var(--textSub)']]
+        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
+    </div>`;
+  }).join('');
+
+
 
   document.getElementById('content').innerHTML = `
     ${kpiHTML}
@@ -1418,44 +1459,3 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
-
-  const kpiHTML = `<div class="kpis">
-    ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
-      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
-      ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
-      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Ganancia / Trade', (m.expectancyEur>=0?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.expectancyEur)+'\u20ac', 'Expectativa media \xb7 base 100k', m.expectancyEur>=0?'var(--green)':'var(--red)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>
-  <div class="kpis" style="margin-top:9px">
-    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
-      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
-      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
-      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>`;
-
-  const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
-    ? `<div style="font-size:10px;color:var(--yellow);background:rgba(255,181,71,0.1);border:0.5px solid rgba(255,181,71,0.2);border-radius:5px;padding:4px 8px;margin-bottom:10px">
-        ⚠ Incluye ops conjuntas D&S
-       </div>` : '';
-  const opCards = m.allOps.map(op => {
-    const o = m.ops[op] || {};
-    const dsCount = m.allOps.includes('D&S') ? (m.ops['D&S']?.ops || 0) : 0;
-    const showDSNote = (currentFilter === 'all') && op !== 'D&S' && dsCount > 0;
-    return `<div class="card" style="border-color:${och(op)}44">
-      <div class="card-h"><span class="card-t" style="color:${oc(op)}">${op}</span><span class="badge" style="background:${och(op)}22;color:${oc(op)}">${o.ops || 0} ops</span></div>
-      ${showDSNote ? `<div style="font-size:10px;color:var(--textSub);margin-bottom:8px">Solo ops individuales · D&S se analiza por separado</div>` : ''}
-      ${currentFilter !== 'all' && op !== 'D&S' ? `<div style="font-size:10px;color:rgba(255,181,71,0.9);margin-bottom:8px">Incluye ${dsCount} ops D&S</div>` : ''}
-      ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
-        ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
-        ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
-        ['TP / SL', `${o.tp || 0} / ${o.sl || 0}`, 'var(--textSub)']]
-        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
-    </div>`;
-  }).join('');
-
-
