@@ -311,6 +311,7 @@ function compute(rows) {
   const netPnl = closed.reduce((s, r) => s + pnl(r), 0);
 
   let eq = 100, peak = 100, maxDD = 0, maxDDPeak = 100, maxDDValley = 100;
+  let euroAcc = 100000; // €100k simulation
   const equity = sorted.map(r => {
     eq += pnl(r); if (eq > peak) peak = eq;
     const dd = (peak - eq) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDPeak = peak; maxDDValley = eq; }
@@ -512,7 +513,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -830,7 +831,43 @@ function renderDash(m) {
     </div>` : ''}
 
     <!-- SECCIÓN: PnL mensual -->
-        ${m.openTrades.length ? `
+        <!-- SECCIÓN: Simulación €100k -->
+    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Simulación — Evolución de una Cuenta de 100.000€</span><div class="sec-l"></div></div>
+    <div class="panel">
+      <div class="panel-h">Evolución del Capital — Base 100.000€ con Riesgo Fijo ${(m.equity[0]?.pnlV !== undefined ? '1.5' : '1.5')}% por Operación</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 18px 0">
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Capital Inicial</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;color:var(--text);font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">100.000€</p>
+        </div>
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Capital Actual</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.finalEuroAcc >= 100000 ? 'var(--green)' : 'var(--red)'}">
+            ${new Intl.NumberFormat('es-ES', {minimumFractionDigits:0, maximumFractionDigits:0}).format(m.finalEuroAcc)}€
+          </p>
+        </div>
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Beneficio Neto</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.finalEuroAcc >= 100000 ? 'var(--green)' : 'var(--red)'}">
+            ${m.finalEuroAcc >= 100000 ? '+' : ''}${new Intl.NumberFormat('es-ES', {minimumFractionDigits:0, maximumFractionDigits:0}).format(m.finalEuroAcc - 100000)}€
+          </p>
+        </div>
+        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
+          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rendimiento</p>
+          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.netPnl >= 0 ? 'var(--green)' : 'var(--red)'}">
+            ${m.netPnl >= 0 ? '+' : ''}${m.netPnl.toFixed(1)}%
+          </p>
+        </div>
+      </div>
+      <div style="padding:14px 18px;position:relative;height:220px">
+        <canvas id="euroChart" role="img" aria-label="Evolución cuenta 100k euros">Evolución capital.</canvas>
+      </div>
+      <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">
+        Cálculo con interés compuesto — cada operación aplica el % de riesgo sobre el capital acumulado en ese momento, no sobre el capital inicial.
+      </div>
+    </div>
+
+    ${m.openTrades.length ? `
     <div class="sec"><span class="sec-n">05</span><span class="sec-t">Operaciones Abiertas</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-body">${openHTML}</div></div>` : ''}
 
@@ -945,11 +982,11 @@ function renderDash(m) {
                       label: {
                         display: true,
                         content: m.monthly[mi+1]?.label || '',
-                        position: 'start',
+                        position: 'end',
                         color: '#5A7A9A',
                         font: { size: 9 },
-                        backgroundColor: 'transparent',
-                        yAdjust: -8
+                        backgroundColor: 'rgba(0,0,0,0)',
+                        yAdjust: 8
                       }
                     };
                   }
@@ -1140,6 +1177,72 @@ function renderDash(m) {
         }
       });
       activeCharts.push(fc);
+    }
+
+    // €100k evolution chart
+    const euroCtx = document.getElementById('euroChart');
+    if (euroCtx && m.equity.length) {
+      const euroData = m.equity.map(e => e.euroVal || 100000);
+      const euroLabels = m.equity.map((_, i) => i + 1);
+      // Month annotations
+      const euroAnn = {};
+      let cumOps2 = 0;
+      m.monthly.forEach((row, mi) => {
+        const monthOps = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp||0) + (row.ops[op]?.sl||0), 0);
+        if (mi < m.monthly.length - 1 && monthOps > 0) {
+          cumOps2 += monthOps;
+          euroAnn['m'+mi] = {
+            type: 'line', xMin: cumOps2 - 0.5, xMax: cumOps2 - 0.5,
+            borderColor: 'rgba(128,128,128,0.3)', borderWidth: 1.5, borderDash: [5,4],
+            label: { display: true, content: m.monthly[mi+1]?.label||'', position: 'end',
+              color: '#5A7A9A', font: { size: 9 }, backgroundColor: 'rgba(0,0,0,0)', yAdjust: 8 }
+          };
+        }
+      });
+      // Reference line at 100k
+      euroAnn['base'] = {
+        type: 'line', yMin: 100000, yMax: 100000,
+        borderColor: 'rgba(128,128,128,0.4)', borderWidth: 1, borderDash: [4,4]
+      };
+      const ec = new Chart(euroCtx, {
+        type: 'line',
+        data: {
+          labels: euroLabels,
+          datasets: [{
+            data: euroData,
+            borderColor: '#00D49A', borderWidth: 2.5, tension: 0.3, fill: true,
+            backgroundColor: 'rgba(0,212,154,0.06)',
+            pointBackgroundColor: m.equity.map(e => e.res==='TP'?'#00D49A':e.res==='SL'?'#FF4C5E':'#FFB547'),
+            pointRadius: 4, pointBorderColor: isDark?'#070A0F':'#fff', pointBorderWidth: 1.5
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            annotation: { annotations: euroAnn },
+            tooltip: { callbacks: {
+              title: items => 'Op #'+items[0].label+' · '+(m.equity[items[0].dataIndex]?.n||''),
+              label: ctx => {
+                const e = m.equity[ctx.dataIndex];
+                const val = ctx.parsed.y;
+                const sign = e?.pnlV >= 0 ? '+' : '';
+                const change = e ? sign+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(e.pnlV/100*val)+' €' : '';
+                return [
+                  'Capital: '+new Intl.NumberFormat('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0}).format(val)+' €',
+                  e ? 'Op: '+sign+e.pnlV.toFixed(1)+'% ('+change+')' : '',
+                  e ? e.res+' · '+e.op : ''
+                ].filter(Boolean);
+              }
+            }}
+          },
+          scales: {
+            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(128,128,128,0.06)' }, title: { display: true, text: 'Operación #', color: '#5A7A9A', font: { size: 9 } } },
+            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(v)+'€' }, grid: { color: 'rgba(128,128,128,0.06)' } }
+          }
+        }
+      });
+      activeCharts.push(ec);
     }
 
     // Monthly WR panel - polished column layout
