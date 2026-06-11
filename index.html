@@ -861,8 +861,8 @@ function renderDash(m) {
           </p>
         </div>
       </div>
-      <div style="padding:14px 18px;position:relative;height:220px">
-        <canvas id="euroChart" role="img" aria-label="Evolución cuenta 100k euros">Evolución capital.</canvas>
+      <div style="padding:14px 18px;position:relative;height:240px;min-height:240px">
+        <canvas id="euroChart" style="display:block;width:100%;height:100%" role="img" aria-label="Evolución cuenta 100k euros"></canvas>
       </div>
       <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">
         Cálculo con interés compuesto — cada operación aplica el % de riesgo sobre el capital acumulado en ese momento, no sobre el capital inicial.
@@ -1184,74 +1184,85 @@ function renderDash(m) {
       activeCharts.push(fc);
     }
 
-    // €100k evolution chart
+    // €100k evolution chart - clean smooth curve
     const euroCtx = document.getElementById('euroChart');
-    if (euroCtx && m.equity.length) {
-      const euroData = m.equity.map(e => e.euroVal || 100000);
-      const euroLabels = m.equity.map((_, i) => i + 1);
-      // Month annotations
-      const euroAnn = {};
-      let cumOps2 = 0;
-      m.monthly.forEach((row, mi) => {
-        const monthOps = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp||0) + (row.ops[op]?.sl||0), 0);
-        if (mi < m.monthly.length - 1 && monthOps > 0) {
-          cumOps2 += monthOps;
-          euroAnn['m'+mi] = {
-            type: 'line', xMin: cumOps2 - 0.5, xMax: cumOps2 - 0.5,
-            borderColor: 'rgba(128,128,128,0.3)', borderWidth: 1.5, borderDash: [5,4],
-            label: { display: false }
-          };
-        }
-      });
-      // Reference line at 100k
-      euroAnn['base'] = {
-        type: 'line', yMin: 100000, yMax: 100000,
-        borderColor: 'rgba(128,128,128,0.4)', borderWidth: 1, borderDash: [4,4]
-      };
+    if (euroCtx) {
+      const euroData = [100000, ...m.equity.map(e => e.euroVal || 100000)];
+      const euroLabels = [0, ...m.equity.map((_, i) => i + 1)];
+      const textColor = '#5A7A9A';
+      const gridColor = 'rgba(128,128,128,0.08)';
       const ec = new Chart(euroCtx, {
         type: 'line',
         data: {
           labels: euroLabels,
           datasets: [{
             data: euroData,
-            borderColor: '#00D49A', borderWidth: 2.5, tension: 0.3, fill: true,
-            backgroundColor: 'rgba(0,212,154,0.06)',
-            pointBackgroundColor: m.equity.map(e => e.res==='TP'?'#00D49A':e.res==='SL'?'#FF4C5E':'#FFB547'),
-            pointRadius: 4, pointBorderColor: isDark?'#070A0F':'#fff', pointBorderWidth: 1.5
+            borderColor: '#00D49A',
+            borderWidth: 3,
+            tension: 0.4,
+            fill: true,
+            backgroundColor: (ctx) => {
+              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+              gradient.addColorStop(0, 'rgba(0,212,154,0.18)');
+              gradient.addColorStop(1, 'rgba(0,212,154,0.01)');
+              return gradient;
+            },
+            pointRadius: 0,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: '#00D49A',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2
           }]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
-            annotation: { annotations: euroAnn },
-            tooltip: { callbacks: {
-              title: items => {
-                const idx = items[0].dataIndex;
-                let cumOps = 0, monthLabel = '';
-                for (const row of m.monthly) {
-                  const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
-                  cumOps += mOps;
-                  if (idx < cumOps) { monthLabel = row.label; break; }
+            tooltip: {
+              callbacks: {
+                title: items => {
+                  const i = items[0].dataIndex;
+                  if (i === 0) return 'Inicio';
+                  const e = m.equity[i-1];
+                  let cumOps = 0, monthLabel = '';
+                  for (const row of m.monthly) {
+                    const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
+                    cumOps += mOps;
+                    if ((i-1) < cumOps) { monthLabel = row.label; break; }
+                  }
+                  return 'Op #'+i+(e?' · '+e.n:'')+(monthLabel?' · '+monthLabel:'');
+                },
+                label: ctx => {
+                  const i = ctx.dataIndex;
+                  const val = ctx.parsed.y;
+                  const fmtVal = new Intl.NumberFormat('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0}).format(val);
+                  if (i === 0) return 'Capital: '+fmtVal+' €';
+                  const e = m.equity[i-1];
+                  const sign = (e?.pnlV||0) >= 0 ? '+' : '';
+                  const changeEur = e ? Math.round(e.pnlV/100 * m.equity[i-2]?.euroVal || 0) : 0;
+                  return [
+                    'Capital: '+fmtVal+' €',
+                    e ? 'Op: '+sign+e.pnlV.toFixed(1)+'% · '+e.res : ''
+                  ].filter(Boolean);
                 }
-                return 'Op #'+items[0].label+' · '+(m.equity[idx]?.n||'')+(monthLabel?' · '+monthLabel:'');
-              },
-              label: ctx => {
-                const e = m.equity[ctx.dataIndex];
-                const val = ctx.parsed.y;
-                const sign = e?.pnlV >= 0 ? '+' : '';
-                const change = e ? sign+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(e.pnlV/100*val)+' €' : '';
-                return [
-                  'Capital: '+new Intl.NumberFormat('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0}).format(val)+' €',
-                  e ? 'Op: '+sign+e.pnlV.toFixed(1)+'% ('+change+')' : '',
-                  e ? e.res+' · '+e.op : ''
-                ].filter(Boolean);
               }
-            }}
+            }
           },
           scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(128,128,128,0.06)' }, title: { display: true, text: 'Operación #', color: '#5A7A9A', font: { size: 9 } } },
-            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(v)+'€' }, grid: { color: 'rgba(128,128,128,0.06)' } }
+            x: {
+              ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 12 },
+              grid: { color: gridColor },
+              title: { display: true, text: 'Operación #', color: textColor, font: { size: 9 } }
+            },
+            y: {
+              ticks: {
+                color: textColor, font: { size: 9 },
+                callback: v => new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(v)+' €'
+              },
+              grid: { color: gridColor }
+            }
           }
         }
       });
