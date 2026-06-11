@@ -733,41 +733,19 @@ function renderDash(m) {
     <div class="sec"><span class="sec-n">01</span><span class="sec-t">Simulación — Evolución de una Cuenta de 100.000€</span><div class="sec-l"></div></div>
     <div class="panel">
       <div class="panel-h">Evolución del Capital — Base 100.000€ con Riesgo Fijo ${(m.equity[0]?.pnlV !== undefined ? '1.5' : '1.5')}% por Operación</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 18px 0">
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Capital Inicial</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;color:var(--text);font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">100.000€</p>
-        </div>
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Capital Actual</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.finalEuroAcc >= 100000 ? 'var(--green)' : 'var(--red)'}">
-            ${new Intl.NumberFormat('es-ES', {minimumFractionDigits:0, maximumFractionDigits:0}).format(m.finalEuroAcc)}€
-          </p>
-        </div>
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Beneficio Neto</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.finalEuroAcc >= 100000 ? 'var(--green)' : 'var(--red)'}">
-            ${m.finalEuroAcc >= 100000 ? '+' : ''}${new Intl.NumberFormat('es-ES', {minimumFractionDigits:0, maximumFractionDigits:0}).format(m.finalEuroAcc - 100000)}€
-          </p>
-        </div>
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rendimiento Total</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.netPnl >= 0 ? 'var(--green)' : 'var(--red)'}">
-            ${m.netPnl >= 0 ? '+' : ''}${m.netPnl.toFixed(1)}%
-          </p>
-        </div>
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Rent. Anualizada</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${m.cagr >= 0 ? 'var(--green)' : 'var(--red)'}">
-            ${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%
-          </p>
-          <p style="margin:2px 0 0;font-size:10px;color:var(--textSub)">CAGR sobre capital inicial</p>
-        </div>
-        <div style="background:var(--panel2);border-radius:8px;padding:12px 14px">
-          <p style="margin:0;font-size:10px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.07em">Edad de la Cuenta</p>
-          <p style="margin:4px 0 0;font-size:20px;font-weight:600;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:var(--text)">${m.accountAgeLabel}</p>
-          <p style="margin:2px 0 0;font-size:10px;color:var(--textSub)">Desde primera operación</p>
-        </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 18px 0">
+        ${[
+          ['Capital Inicial', '100.000€', 'var(--text)', ''],
+          ['Capital Actual', new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.finalEuroAcc)+'€', m.finalEuroAcc>=100000?'var(--green)':'var(--red)', ''],
+          ['Beneficio Neto', (m.finalEuroAcc>=100000?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.finalEuroAcc-100000)+'€', m.finalEuroAcc>=100000?'var(--green)':'var(--red)', ''],
+          ['Rendimiento', (m.netPnl>=0?'+':'')+m.netPnl.toFixed(1)+'%', m.netPnl>=0?'var(--green)':'var(--red)', ''],
+          ['Rent. Anualizada', (m.cagr>=0?'+':'')+m.cagr.toFixed(1)+'%', m.cagr>=0?'var(--green)':'var(--red)', 'CAGR'],
+          ['Edad Cuenta', m.accountAgeDays+' días', 'var(--text)', 'Desde primera op']
+        ].map(([l,v,c,s]) => '<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:7px;padding:8px 14px;display:flex;flex-direction:column;gap:2px;min-width:120px;flex:1">'
+          +'<span style="font-size:9px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.08em;font-weight:500">'+l+'</span>'
+          +'<span style="font-size:16px;font-weight:600;color:'+c+';font-family:Inter,sans-serif;font-variant-numeric:tabular-nums;line-height:1.2">'+v+'</span>'
+          +(s?'<span style="font-size:9px;color:var(--muted)">'+s+'</span>':'')
+          +'</div>').join('')}
       </div>
       <div style="padding:14px 18px;position:relative;height:240px;min-height:240px">
         <canvas id="euroChart" style="display:block;width:100%;height:100%" role="img" aria-label="Evolución cuenta 100k euros"></canvas>
