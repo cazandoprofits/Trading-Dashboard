@@ -755,11 +755,7 @@ function renderDash(m) {
 
 
     <div class="sec"><span class="sec-n">02</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Curva de Equity (Base 100%)</div>
-      <div style="padding:14px 18px;position:relative;height:210px">
-        <canvas id="eqChart" role="img" aria-label="Curva de equity acumulado por operación">Equity acumulado.</canvas>
-      </div>
-    </div>
+    >
     <div class="grid2">
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
         ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],
@@ -781,11 +777,7 @@ function renderDash(m) {
 
     <div class="sec"><span class="sec-n">03</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
     <div class="cards3">${opCards}</div>
-      <div style="padding:14px 18px;position:relative;height:220px">
-        <canvas id="monthlyBarChart" role="img" aria-label="PnL mensual por operador">PnL mensual por operador.</canvas>
-      </div>
-
-    </div>
+</div>
 
     <div class="sec"><span class="sec-n">04</span><span class="sec-t">Calidad del Sistema — Análisis por Par</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
@@ -796,7 +788,20 @@ function renderDash(m) {
 
     <!-- SECCIÓN: Rolling Win Rate -->
     <div class="sec"><span class="sec-n">05</span><span class="sec-t">Gestión del Riesgo</span><div class="sec-l"></div></div>
-    <div class="grid2">
+    
+    <!-- Equity curve collapsible -->
+    <div class="panel" style="margin-bottom:12px">
+      <div class="panel-h" onclick="this.parentElement.querySelector('.eq-collapse').style.display=this.parentElement.querySelector('.eq-collapse').style.display==='none'?'block':'none'" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center">
+        <span>Curva de Equity (Base 100%)</span>
+        <span style="font-size:11px;color:var(--blue);font-weight:500">Ver / Ocultar ▾</span>
+      </div>
+      <div class="eq-collapse" style="display:none">
+        <div style="padding:14px 18px;position:relative;height:210px">
+          <canvas id="eqChart" role="img" aria-label="Curva de equity acumulado por operación">Equity acumulado.</canvas>
+        </div>
+      </div>
+    </div>
+<div class="grid2">
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
         ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],['Racha Máx. Perdedora', m.maxL+' SL consecutivos', '#FF4C5E'],['Max Drawdown', '−'+m.maxDD.toFixed(2)+'% · '+m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],['Riesgo de Ruina', '< 0.1%', '#00D49A'],['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']].map(([l,v,c]) => '<div class="kv" style="padding:8px 16px"><span class="kv-l">'+l+'</span><span class="kv-v" style="color:'+c+'">'+v+'</span></div>').join('')}
       </div>
@@ -855,23 +860,7 @@ function renderDash(m) {
       <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
     </div>
 
-    <!-- SECCIÓN: Curvas de Equity por Operador — solo en vista "Todos" -->
-    ${currentFilter === 'all' ? `
-      <div style="padding:14px 18px;position:relative;height:220px">
-        <canvas id="opEqChart" role="img" aria-label="Curvas de Equity por Operador">Equity por operador.</canvas>
-      </div>
-      <div style="display:flex;gap:16px;padding:0 18px 14px;flex-wrap:wrap">
-        ${m.allOps.map(op=>`
-          <div style="display:flex;align-items:center;gap:6px;font-size:11px">
-            <div style="width:12px;height:3px;background:${och(op)};border-radius:2px"></div>
-            <span style="color:var(--textSub)">${op}</span>
-            <span style="font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${pnlColor((m.ops[op]?.netPnl||0))}">${pct(m.ops[op]?.netPnl||0)}</span>
-          </div>`).join('')}
-      </div>
-    </div>` : ''}
-
-    <!-- SECCIÓN: PnL mensual -->
-        ${m.openTrades.length ? `
+    ${m.openTrades.length ? `
     <div class="sec"><span class="sec-n">05</span><span class="sec-t">Operaciones Abiertas</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-body">${openHTML}</div></div>` : ''}
 
