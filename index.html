@@ -327,12 +327,7 @@ function compute(rows) {
 
   // Normalización: la operación del 30/03 se trata como 01/04 para
   // evitar que marzo aparezca como mes independiente con 1 sola entrada
-  data.forEach(r => {
-    const d = parseDate(r.Fecha);
-    if (d && d.getMonth() === 2) { // mes 2 = marzo (0-indexed)
-      r._fechaNorm = '01/04/' + d.getFullYear();
-    }
-  });
+
   const closed = data.filter(r => r.Resultado === 'Take Profit' || r.Resultado === 'Stop Loss');
   const isTP = r => r.Resultado === 'Take Profit';
   const isSL = r => r.Resultado === 'Stop Loss';
@@ -340,7 +335,7 @@ function compute(rows) {
   const risk = r => { const v = parseFloat(String(r.Riesgo || '1.5').replace('%', '')); return isNaN(v) ? 1.5 : v; };
   const pnl = r => rr(r) * risk(r);
   const sorted = [...closed].sort((a, b) => {
-    const da = (parseDate(r.Fecha(a)) || 0), db = (parseDate(r.Fecha(b)) || 0);
+    const da = (parseDate(a.Fecha) || 0), db = (parseDate(b.Fecha) || 0);
     if (da - db !== 0) return da - db;
     return (parseFloat(a['N·']||a['N'])||0) - (parseFloat(b['N·']||b['N'])||0);
   });
