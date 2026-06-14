@@ -348,8 +348,7 @@ function compute(rows) {
   const equity = sorted.map(r => {
     eq += pnl(r); if (eq > peak) peak = eq;
     const dd = (peak - eq) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDPeak = peak; maxDDValley = eq; }
-    const pnlPct = pnl(r) / 100;
-    euroAcc = +(euroAcc * (1 + pnlPct)).toFixed(2);
+    euroAcc = +(euroAcc + (pnl(r) / 100 * 100000)).toFixed(2);
     return { n: `N·${r['N·'] || r['N']}`, eq: +eq.toFixed(2), dd: +dd.toFixed(2), op: r.Operador, res: rr(r) > 0 ? 'TP' : rr(r) < 0 ? 'SL' : 'BE', pnlV: +pnl(r).toFixed(2), euroVal: euroAcc };
   });
 
@@ -462,7 +461,7 @@ function compute(rows) {
 
   // Rentabilidad anualizada real (CAGR)
   const yearsElapsed = accountAgeDays > 0 ? accountAgeDays / 365.25 : 1;
-  const cagr = yearsElapsed > 0 ? (Math.pow(euroAcc / 100000, 1 / yearsElapsed) - 1) * 100 : 0;
+  const cagr = yearsElapsed > 0 ? ((euroAcc - 100000) / 100000 / yearsElapsed) * 100 : 0;
 
   // % Meses positivos
   const monthlyPnls = Object.values(monthly).map(m => {
@@ -832,7 +831,7 @@ function renderDash(m) {
         <canvas id="euroChart" style="display:block;width:100%;height:100%" role="img" aria-label="Evolución cuenta 100k euros"></canvas>
       </div>
       <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">
-        Cálculo con interés compuesto — cada operación aplica el % de riesgo sobre el capital acumulado en ese momento, no sobre el capital inicial.
+        Riesgo fijo — cada operación arriesga siempre el 1.5% sobre los 100.000€ iniciales (1.500€ por operación).
       </div>
     </div>
 
