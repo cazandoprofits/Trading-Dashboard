@@ -324,14 +324,24 @@ function compute(rows) {
     const nb = parseFloat(b['N·'] || b['N']) || 0;
     return na - nb;
   });
+
+  // Normalización: la operación del 30/03 se trata como 01/04 para
+  // evitar que marzo aparezca como mes independiente con 1 sola entrada
+  data.forEach(r => {
+    const d = parseDate(getFecha(r));
+    if (d && d.getMonth() === 2) { // mes 2 = marzo (0-indexed)
+      r._fechaNorm = '01/04/' + d.getFullYear();
+    }
+  });
   const closed = data.filter(r => r.Resultado === 'Take Profit' || r.Resultado === 'Stop Loss');
   const isTP = r => r.Resultado === 'Take Profit';
   const isSL = r => r.Resultado === 'Stop Loss';
   const rr = r => { const v = parseFloat(r['RR Final']); return isNaN(v) ? 0 : v; };
   const risk = r => { const v = parseFloat(String(r.Riesgo || '1.5').replace('%', '')); return isNaN(v) ? 1.5 : v; };
   const pnl = r => rr(r) * risk(r);
+  const getFecha = r => r._fechaNorm || r.Fecha || r['Fecha'];
   const sorted = [...closed].sort((a, b) => {
-    const da = (parseDate(a.Fecha) || 0), db = (parseDate(b.Fecha) || 0);
+    const da = (parseDate(getFecha(a)) || 0), db = (parseDate(getFecha(b)) || 0);
     if (da - db !== 0) return da - db;
     return (parseFloat(a['N·']||a['N'])||0) - (parseFloat(b['N·']||b['N'])||0);
   });
@@ -356,7 +366,7 @@ function compute(rows) {
   // Más correcto que por operación individual
   const monthlyPnlMap = {};
   closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
+    const d = parseDate(getFecha(r)); if (!d) return;
     const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     monthlyPnlMap[k] = (monthlyPnlMap[k] || 0) + pnl(r);
   });
@@ -393,7 +403,7 @@ function compute(rows) {
 
   const monthly = {};
   closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
+    const d = parseDate(getFecha(r)); if (!d) return;
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const lbl = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
     if (!monthly[k]) monthly[k] = { key: k, label: lbl, ops: {} };
@@ -451,7 +461,7 @@ function compute(rows) {
   
 
   // Edad de la cuenta (primer trade → hoy)
-  const allDates = data.map(r => parseDate(r.Fecha)).filter(Boolean);
+  const allDates = data.map(r => parseDate(getFecha(r))).filter(Boolean);
   const firstDate = allDates.length ? new Date(Math.min(...allDates)) : null;
   const lastDate = allDates.length ? new Date(Math.max(...allDates)) : null;
   const today = new Date();
@@ -483,7 +493,7 @@ function compute(rows) {
   // Frecuencia de operaciones por semana
   const weekMap = {};
   closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
+    const d = parseDate(getFecha(r)); if (!d) return;
     const yr = d.getFullYear();
     const wk = Math.ceil((((d - new Date(yr,0,1))/86400000) + new Date(yr,0,1).getDay()+1)/7);
     const key = yr+'-W'+String(wk).padStart(2,'0');
