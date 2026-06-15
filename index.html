@@ -572,7 +572,7 @@ function compute(rows) {
     return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
   };
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, firstDate, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
 }
 
 // ─── HELPERS ───────────────────────────────────────
@@ -841,7 +841,7 @@ function renderDash(m) {
 
 
 
-    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
     >
     <div class="grid2">
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
@@ -859,11 +859,11 @@ function renderDash(m) {
       <div style="overflow-x:auto"><table class="tbl">${monthRows}</table></div>
     </div>
 
-    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
     <div class="cards3">${opCards}</div>
 </div>
 
-    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Calidad del Sistema — Análisis por Par</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Calidad del Sistema — Análisis por Par</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="tbl" id="pairTable"></table>
@@ -871,7 +871,7 @@ function renderDash(m) {
     </div>
 
     <!-- SECCIÓN: Rolling Win Rate -->
-    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Gestión del Riesgo</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Gestión del Riesgo</span><div class="sec-l"></div></div>
     
     <!-- Equity curve collapsible -->
     <div class="panel" style="margin-bottom:12px">
@@ -891,7 +891,7 @@ function renderDash(m) {
       </div>
       <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
     </div>
-    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Eficiencia Operativa</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Eficiencia Operativa</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Frecuencia de Operaciones — Actividad Semanal</div>
       <div style="padding:14px 18px;position:relative;height:160px">
         <canvas id="freqChart" role="img" aria-label="Frecuencia semanal">Ops por semana.</canvas>
@@ -925,7 +925,7 @@ function renderDash(m) {
     </div>
 
     <!-- SECCIÓN: Análisis por Par -->
-    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Estado Actual — Rendimiento Reciente</span><div class="sec-l"></div></div>
+    <div class="sec"><span class="sec-n">08</span><span class="sec-t">Estado Actual — Rendimiento Reciente</span><div class="sec-l"></div></div>
     <div class="panel"><div class="panel-h">Evolución del Win Rate — Ventana Móvil de 10 Ops</div>
       <div style="padding:14px 18px;position:relative;height:180px">
         <canvas id="rollingWrChart" role="img" aria-label="Rolling win rate últimas 10 operaciones">Win rate móvil.</canvas>
@@ -942,6 +942,15 @@ function renderDash(m) {
     <div class="panel" style="margin-top:12px">
       <div class="panel-h">WinRate Mensual (%) — Desglose por Operador</div>
       <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
+    </div>
+
+    <!-- SECCIÓN: Comparativa vs Benchmarks -->
+    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Comparativa vs Mercados</span><div class="sec-l"></div></div>
+    <div class="panel">
+      <div class="panel-h">Tu Sistema vs Principales Activos — Mismo Período (${m.accountAgeDays} días)</div>
+      <div id="benchmarkContent" style="padding:14px 18px">
+        <div style="font-size:12px;color:var(--textSub)">Cargando datos de mercado...</div>
+      </div>
     </div>
 
     ${m.openTrades.length ? `
@@ -1390,6 +1399,10 @@ function renderDash(m) {
       });
       wrBadges.innerHTML = html;
     }
+  // Load benchmarks
+  if (m.firstDate) {
+    loadBenchmarks(m.firstDate, m.netPnl, m.maxDD);
+  }
   }, 100);
 }
 
@@ -1460,6 +1473,115 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 100);
   }
 });
+// ─── BENCHMARK COMPARISON ──────────────────────────────
+const BENCHMARKS = [
+  { symbol: '%5EGSPC',  name: 'S&P 500',  color: '#4BA3E3' },
+  { symbol: '%5EIXIC',  name: 'Nasdaq',   color: '#9B59B6' },
+  { symbol: 'BTC-USD',  name: 'Bitcoin',  color: '#F7931A' },
+  { symbol: 'GC%3DF',   name: 'Oro',      color: '#FFB547' },
+  { symbol: '%5EIBEX',  name: 'IBEX 35',  color: '#C0392B' },
+];
+
+async function fetchBenchmark(symbol, startTs, endTs) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${startTs}&period2=${endTs}&interval=1d`;
+  const proxy = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
+  try {
+    const res = await fetch(proxy);
+    const data = await res.json();
+    const prices = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(p => p !== null);
+    if (!prices || prices.length < 2) return null;
+    const ret = (prices[prices.length - 1] - prices[0]) / prices[0] * 100;
+    let peak = prices[0], maxDD = 0;
+    prices.forEach(p => {
+      if (p > peak) peak = p;
+      const dd = (peak - p) / peak * 100;
+      if (dd > maxDD) maxDD = dd;
+    });
+    return { ret: +ret.toFixed(2), maxDD: +maxDD.toFixed(2) };
+  } catch(e) {
+    return null;
+  }
+}
+
+async function loadBenchmarks(firstDate, systemRet, systemDD) {
+  const el = document.getElementById('benchmarkContent');
+  if (!el) return;
+  const startTs = Math.floor(new Date(firstDate).getTime() / 1000);
+  const endTs = Math.floor(Date.now() / 1000);
+
+  const results = await Promise.all(BENCHMARKS.map(b => fetchBenchmark(b.symbol, startTs, endTs)));
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const bg = isDark ? '#0D1117' : '#F8FAFC';
+  const border = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+
+  let html = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <table style="width:100%;border-collapse:collapse;font-family:'DM Sans',sans-serif">
+      <thead>
+        <tr style="border-bottom:1px solid ${border}">
+          <th style="padding:10px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--textSub);font-weight:500">Activo</th>
+          <th style="padding:10px 14px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--textSub);font-weight:500">Retorno</th>
+          <th style="padding:10px 14px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--textSub);font-weight:500">Max DD</th>
+          <th style="padding:10px 14px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--textSub);font-weight:500">Retorno vs Ti</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  // Tu sistema primero
+  html += `<tr style="border-bottom:0.5px solid ${border};background:rgba(0,212,154,0.05)">
+    <td style="padding:11px 14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--green)">Tu Sistema</div>
+          <div style="font-size:10px;color:var(--textSub)">DCM Trading</div>
+        </div>
+      </div>
+    </td>
+    <td style="padding:11px 14px;text-align:right;font-weight:700;font-size:14px;color:var(--green);font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">+${systemRet.toFixed(1)}%</td>
+    <td style="padding:11px 14px;text-align:right;font-weight:600;font-size:13px;color:#FF4C5E;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">-${systemDD.toFixed(2)}%</td>
+    <td style="padding:11px 14px;text-align:right;color:var(--textSub);font-size:12px">—</td>
+  </tr>`;
+
+  BENCHMARKS.forEach((b, i) => {
+    const r = results[i];
+    const ret = r ? r.ret : null;
+    const dd = r ? r.maxDD : null;
+    const diff = ret !== null ? systemRet - ret : null;
+    const retColor = ret === null ? 'var(--muted)' : ret >= 0 ? 'var(--green)' : '#FF4C5E';
+    const diffColor = diff === null ? 'var(--muted)' : diff > 0 ? 'var(--green)' : '#FF4C5E';
+    const diffStr = diff === null ? '—' : (diff > 0 ? '+' : '') + diff.toFixed(1) + '%';
+
+    html += `<tr style="border-bottom:0.5px solid ${border}">
+      <td style="padding:11px 14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          
+          <div>
+            <div style="font-weight:600;font-size:13px;color:var(--text)">${b.name}</div>
+          </div>
+        </div>
+      </td>
+      <td style="padding:11px 14px;text-align:right;font-weight:700;font-size:14px;color:${retColor};font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">
+        ${ret === null ? '—' : (ret >= 0 ? '+' : '') + ret.toFixed(1) + '%'}
+      </td>
+      <td style="padding:11px 14px;text-align:right;font-weight:600;font-size:13px;color:${dd !== null ? '#FF4C5E' : 'var(--muted)'};font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">
+        ${dd === null ? '—' : '-' + dd.toFixed(2) + '%'}
+      </td>
+      <td style="padding:11px 14px;text-align:right;font-weight:700;font-size:13px;color:${diffColor};font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums">
+        ${diffStr}
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>
+    <div style="padding:10px 0 2px;font-size:10px;color:var(--muted)">
+      Período: desde primera operación hasta hoy · Datos: Yahoo Finance · Max DD calculado sobre precios de cierre diarios
+    </div>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
 </script>
 </body>
 </html>
