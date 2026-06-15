@@ -841,7 +841,16 @@ function renderDash(m) {
 
 
 
-    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
+    <div class="sec"    <!-- SECCIÓN: Comparativa vs Benchmarks -->
+    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Comparativa vs Mercados</span><div class="sec-l"></div></div>
+    <div class="panel">
+      <div class="panel-h">Tu Sistema vs Principales Activos — Mismo Período (${m.accountAgeDays} días)</div>
+      <div id="benchmarkContent" style="padding:14px 18px 8px">
+        <div style="font-size:12px;color:var(--textSub)">Cargando datos de mercado...</div>
+      </div>
+    </div>
+
+    ><span class="sec-n">03</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
     >
     <div class="grid2">
       <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
@@ -942,15 +951,6 @@ function renderDash(m) {
     <div class="panel" style="margin-top:12px">
       <div class="panel-h">WinRate Mensual (%) — Desglose por Operador</div>
       <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
-    </div>
-
-    <!-- SECCIÓN: Comparativa vs Benchmarks -->
-    <div class="sec"><span class="sec-n">02</span><span class="sec-t">Comparativa vs Mercados</span><div class="sec-l"></div></div>
-    <div class="panel">
-      <div class="panel-h">Tu Sistema vs Principales Activos — Mismo Período (${m.accountAgeDays} días)</div>
-      <div id="benchmarkContent" style="padding:14px 18px">
-        <div style="font-size:12px;color:var(--textSub)">Cargando datos de mercado...</div>
-      </div>
     </div>
 
     ${m.openTrades.length ? `
@@ -1483,24 +1483,33 @@ const BENCHMARKS = [
 ];
 
 async function fetchBenchmark(symbol, startTs, endTs) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${startTs}&period2=${endTs}&interval=1d`;
-  const proxy = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-  try {
-    const res = await fetch(proxy);
-    const data = await res.json();
-    const prices = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(p => p !== null);
-    if (!prices || prices.length < 2) return null;
-    const ret = (prices[prices.length - 1] - prices[0]) / prices[0] * 100;
-    let peak = prices[0], maxDD = 0;
-    prices.forEach(p => {
-      if (p > peak) peak = p;
-      const dd = (peak - p) / peak * 100;
-      if (dd > maxDD) maxDD = dd;
-    });
-    return { ret: +ret.toFixed(2), maxDD: +maxDD.toFixed(2) };
-  } catch(e) {
-    return null;
+  const yhUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${startTs}&period2=${endTs}&interval=1d`;
+  const proxies = [
+    `https://corsproxy.io/?url=${encodeURIComponent(yhUrl)}`,
+    `https://api.allorigins.win/get?url=${encodeURIComponent(yhUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yhUrl)}`
+  ];
+
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const raw = await res.json();
+      // allorigins wraps in {contents: '...'}
+      const data = raw.contents ? JSON.parse(raw.contents) : raw;
+      const prices = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(p => p != null);
+      if (!prices || prices.length < 2) continue;
+      const ret = (prices[prices.length - 1] - prices[0]) / prices[0] * 100;
+      let peak = prices[0], maxDD = 0;
+      prices.forEach(p => {
+        if (p > peak) peak = p;
+        const dd = (peak - p) / peak * 100;
+        if (dd > maxDD) maxDD = dd;
+      });
+      return { ret: +ret.toFixed(2), maxDD: +maxDD.toFixed(2) };
+    } catch(e) { continue; }
   }
+  return null;
 }
 
 async function loadBenchmarks(firstDate, systemRet, systemDD) {
