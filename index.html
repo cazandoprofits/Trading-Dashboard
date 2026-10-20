@@ -307,14 +307,15 @@
 // Núcleo de cálculo: funciones puras, sin DOM. Todas las métricas salen de aquí.
 const CFG = Object.freeze({
   CAPITAL: 100000,        // capital de referencia (€)
-  RISK_PCT: 1.5,          // riesgo fijo por operación, % del capital inicial (sin interés compuesto)
+  DEFAULT_RISK_PCT: 1.5,  // riesgo que se asume si la fila no indica uno válido (% del capital inicial)
+  RISK_MIN: 0.1,          // rango de riesgo válido por operación, en %
+  RISK_MAX: 10,
   ROLL_WIN: 10,           // ventana del win rate móvil (operaciones)
   MC_PATHS: 5000,         // simulaciones Monte Carlo
   DD_LIMIT: 0.10,         // umbral de drawdown evaluado en el Monte Carlo
   EDGE_GOOD_R: 0.2,       // esperanza (R/op) a partir de la cual el color es verde
   ANNUALIZE_MIN_DAYS: 365 // GIPS: no se anualizan periodos inferiores a un año
 });
-const RISK_EUR = CFG.CAPITAL * CFG.RISK_PCT / 100;
 const EPS = 1e-9;
 const DAY_MS = 86400000;
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -412,7 +413,7 @@ function buildModel(table, today) {
   }
 
   // 2) Clasificar cada operación
-  const issues = { dayMismatch: [], assumed: [], riskDiff: [], noDate: [], otherRes: [], inconsistent: [] };
+  const issues = { dayMismatch: [], assumed: [], noRisk: [], noDate: [], otherRes: [], inconsistent: [] };
   const trades = [], open = [];
   for (const r of byN.values()) {
     const nraw = get(r, 'n').trim();
@@ -420,13 +421,14 @@ function buildModel(table, today) {
     const day = parseDate(get(r, 'fecha'));
     const res = classifyResult(get(r, 'resultado'));
     const rr = parseNum(get(r, 'rrfinal'));
-    const risk = parseNum(get(r, 'riesgo'));
-    if (!Number.isNaN(risk) && Math.abs(risk - CFG.RISK_PCT) > EPS) issues.riskDiff.push(nraw);
+    // Riesgo de la operación en % del capital inicial (columna Riesgo: 1%, 1,5%, 2%, 3%...)
+    let risk = parseNum(get(r, 'riesgo'));
+    if (Number.isNaN(risk) || risk < CFG.RISK_MIN - EPS || risk > CFG.RISK_MAX + EPS) risk = null;
     let ent = DAY_KEYS[norm(get(r, 'diaentrada'))];
     if (ent != null && day != null && ent !== weekdayOf(day)) issues.dayMismatch.push(nraw);
     if (ent == null && day != null) ent = weekdayOf(day);
     const t = {
-      n, nraw, day, ent: ent == null ? null : ent,
+      n, nraw, day, risk, ent: ent == null ? null : ent,
       par: norm(get(r, 'par')).toUpperCase(),
       dir: get(r, 'direccion').trim(),
       tipo: get(r, 'tipo').trim(),
@@ -453,8 +455,9 @@ function buildModel(table, today) {
       continue;
     }
     if (day == null) issues.noDate.push(nraw);
+    if (t.risk == null) { issues.noRisk.push(nraw); t.risk = CFG.DEFAULT_RISK_PCT; }   // sin riesgo válido: se asume 1,5% y se avisa
     t.R = R;
-    t.pnl = R * RISK_EUR;                             // riesgo fijo: 1R = 1,5% de 100.000 € = 1.500 €
+    t.pnl = R * t.risk / 100 * CFG.CAPITAL;           // beneficio = RR final × riesgo × capital inicial (sin interés compuesto)
     t.out = R > EPS ? 'w' : R < -EPS ? 'l' : 'b';
     trades.push(t);
   }
@@ -473,7 +476,11 @@ function buildModel(table, today) {
   const net = trades.reduce((s, t) => s + t.pnl, 0);
   const avgWinR = mean(wins.map(t => t.R));
   const avgLossR = mean(losses.map(t => -t.R));
+  const avgWinEur = mean(wins.map(t => t.pnl));
+  const avgLossEur = mean(losses.map(t => -t.pnl));
   const expR = mean(trades.map(t => t.R));
+  const expEur = mean(trades.map(t => t.pnl));
+  const avgRisk = mean(trades.map(t => t.risk));
 
   // 4) Curva de capital y drawdown (sobre cierres; no incluye flotante)
   let eq = CFG.CAPITAL, peak = CFG.CAPITAL, peakIdx = -1;
@@ -616,11 +623,22 @@ function buildModel(table, today) {
   const pairs = [...pm.values()].map(p => ({ ...p, wr: p.w / p.n, expR: p.R / p.n, pf: p.gl > EPS ? p.gw / p.gl : (p.gw > EPS ? Infinity : null) }))
     .sort((a, b) => (b.wr - a.wr) || (b.n - a.n) || (b.pnl - a.pnl) || (a.par < b.par ? -1 : a.par > b.par ? 1 : 0));
 
+  // 13b) Nivel de riesgo
+  const rm = new Map();
+  for (const t of trades) {
+    const k = Math.round(t.risk * 100) / 100;
+    if (!rm.has(k)) rm.set(k, { risk: k, n: 0, w: 0, l: 0, b: 0, pnl: 0, R: 0 });
+    const o = rm.get(k);
+    o.n++; o.pnl += t.pnl; o.R += t.R; o[t.out]++;
+  }
+  const riskLevels = [...rm.values()].sort((a, b) => a.risk - b.risk).map(o => ({ ...o, wr: o.w / o.n, expR: o.R / o.n }));
+
   // 14) Monte Carlo: bootstrap bayesiano de tus propias operaciones (incluye la incertidumbre del win rate)
   let mc = null;
   if (N >= 10) {
     const H = Math.round(Math.min(500, Math.max(20, Math.round(opsWeek * 52))));
     const Rs = trades.map(t => t.R);
+    const Ps = trades.map(t => t.pnl);               // resultados en € con el riesgo real de cada operación
     const sumR = Rs.reduce((s, x) => s + x, 0);
     const rnd = mulberry32((N * 7919 + Math.round(sumR * 100) * 104729) >>> 0);
     const c = new Float64Array(N);
@@ -634,7 +652,7 @@ function buildModel(table, today) {
         const u = rnd() * acc;
         let lo = 0, hi = N - 1;
         while (lo < hi) { const mid = (lo + hi) >> 1; if (c[mid] < u) lo = mid + 1; else hi = mid; }
-        e += Rs[lo] * RISK_EUR;
+        e += Ps[lo];
         if (e > pk) pk = e;
         const dd = (pk - e) / pk;
         if (dd > mdd) mdd = dd;
@@ -651,18 +669,18 @@ function buildModel(table, today) {
     totals: {
       N, wins: wins.length, losses: losses.length, be: bes.length, totalTrades,
       wr: N ? wins.length / N : null,
-      // Win rate mínimo para esperanza 0 con las medias reales, en la misma base que el win rate (los BE cuentan en el total):
-      // WR·G = (1 − WR − b)·P  →  WR* = (1 − b)·P / (G + P), con b = proporción de BE
-      beWr: (avgWinR != null && avgLossR != null && avgWinR + avgLossR > EPS) ? (1 - bes.length / N) * avgLossR / (avgWinR + avgLossR) : null,
+      // Win rate mínimo para beneficio 0 con la ganancia y pérdida medias reales en €, en la misma base que el win rate
+      // (los BE cuentan en el total): WR·G = (1 − WR − b)·P  →  WR* = (1 − b)·P / (G + P), con b = proporción de BE
+      beWr: (avgWinEur != null && avgLossEur != null && avgWinEur + avgLossEur > EPS) ? (1 - bes.length / N) * avgLossEur / (avgWinEur + avgLossEur) : null,
       pf: grossL > EPS ? grossW / grossL : (grossW > EPS ? Infinity : null),
-      grossW, grossL, net, netPct: net / CFG.CAPITAL, expR, expEur: expR == null ? null : expR * RISK_EUR,
-      avgWinR, avgLossR, finalEq: eq, opsWeek
+      grossW, grossL, net, netPct: net / CFG.CAPITAL, expR, expEur,
+      avgWinR, avgLossR, avgWinEur, avgLossEur, avgRisk, finalEq: eq, opsWeek
     },
     risk: { maxDD, ddPeak, ddTrough, ddPeakIdx, ddTroughIdx, curDD: N ? trades[N - 1].dd : 0, peak,
             timeInDD: N ? under / N : null, longestDD: longest, maxWin: mw, maxLoss: ml, maxLossEur },
     months, years, monthly: { nClosed: closedM.length, avg: mean(rets), best, worst, sharpe, sortino },
     annual: { cagr, calmar, daysLeft: Math.max(0, CFG.ANNUALIZE_MIN_DAYS - ageDays) },
-    weeks, weekdays, dur, rolling, pairs, mc, issues
+    weeks, weekdays, dur, rolling, pairs, riskLevels, mc, issues
   };
 }
 // @@CORE-END ───────────────────────────────────────────────────────────────
@@ -704,10 +722,12 @@ const fmtPct = (frac, dec = 1, signed = true) => (frac == null || !Number.isFini
 const fmtEur = (v, signed = false) => (v == null || !Number.isFinite(v)) ? '—' : (signed ? fmtSigned(v, 0) : fmtNum(v, 0)) + ' €';
 const fmtR = (v, dec = 2) => (v == null || !Number.isFinite(v)) ? '—' : fmtSigned(v, dec) + 'R';
 const fmtPF = v => v == null ? '—' : v === Infinity ? '∞' : fmtNum(v, 2);
+const fmtRisk = v => (v == null || !Number.isFinite(v)) ? '—' : fmtNum(v, Math.abs(v * 10 - Math.round(v * 10)) < 1e-9 ? (Number.isInteger(v) ? 0 : 1) : 2) + '%';
 function dayParts(day) { const d = new Date(day * DAY_MS); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
 const fmtDate = day => { if (day == null) return '—'; const p = dayParts(day); return String(p.d).padStart(2, '0') + '/' + String(p.m + 1).padStart(2, '0') + '/' + p.y; };
 const fmtMonth = mi => MES[mi % 12] + ' ' + Math.floor(mi / 12);
 const signCls = v => v == null ? 'c-muted' : v > EPS ? 'c-good' : v < -EPS ? 'c-bad' : 'c-muted';
+const pfCls = v => v == null ? 'c-muted' : v >= 1.5 - EPS ? 'c-good' : v >= 1 - EPS ? 'c-warn' : 'c-bad';
 const edgeCls = r => (r == null || !Number.isFinite(r)) ? 'c-muted' : r >= CFG.EDGE_GOOD_R - EPS ? 'c-good' : r >= -EPS ? 'c-warn' : 'c-bad';
 const plural = (n, s, p) => n === 1 ? s : p;
 function todayDay() { const n = new Date(); return mkDay(n.getFullYear(), n.getMonth() + 1, n.getDate()); }
@@ -744,8 +764,8 @@ function renderKpis(M) {
   </div></div>
   <div class="kgroup"><div class="kgroup-l">Sistema</div><div class="kpis">
     ${kpi('Win Rate', fmtPct(T.wr, 1, false), `${T.wins} TP · ${T.losses} SL${T.be ? ` · ${T.be} BE` : ''}${beTxt ? ` · <span class="nw">${beTxt}</span>` : ''}`, edgeCls(T.expR))}
-    ${kpi('Profit Factor', fmtPF(T.pf), 'Beneficio bruto / pérdida bruta', edgeCls(T.expR))}
-    ${kpi('Esperanza por Operación', fmtEur(T.expEur, true), T.expR == null ? 'Sin operaciones cerradas' : `${fmtR(T.expR)} de media por operación`, signCls(T.expR))}
+    ${kpi('Profit Factor', fmtPF(T.pf), 'Beneficio bruto / pérdida bruta', pfCls(T.pf))}
+    ${kpi('Esperanza por Operación', fmtEur(T.expEur, true), T.expR == null ? 'Sin operaciones cerradas' : `Beneficio medio · RR medio ${fmtR(T.expR)}`, signCls(T.expEur))}
     ${kpi('Operaciones / Semana', fmtNum(T.opsWeek, 1), `${T.totalTrades} ${plural(T.totalTrades, 'operación', 'operaciones')} en ${M.ageDays} ${plural(M.ageDays, 'día', 'días')}`, 'c-text')}
   </div></div>
   <div class="kgroup"><div class="kgroup-l">Riesgo</div><div class="kpis">
@@ -771,10 +791,10 @@ function renderEquity(M) {
     ? ` La rentabilidad anualizada aparecerá al cumplir 12 meses (faltan ${A.daysLeft} días): las rentabilidades de periodos inferiores a un año no se anualizan (norma GIPS).`
     : ' Rentabilidad anualizada geométrica (CAGR) desde la primera operación.';
   return `${sec('01', 'Evolución sobre 100.000 €')}
-  <div class="panel">${panelHead('Evolución del Capital', `Riesgo fijo ${fmtEur(RISK_EUR)} por operación`)}
+  <div class="panel">${panelHead('Evolución del Capital', T.avgRisk == null ? 'Sin interés compuesto' : `Riesgo medio ${fmtRisk(T.avgRisk)} por operación`)}
     <div class="strip">${cells}</div>
     ${M.trades.length ? `<div class="chart-pad"><div class="chart" style="height:300px"><canvas id="eqChart" role="img" aria-label="Evolución del capital en euros"></canvas></div></div>` : '<div class="empty">Aún no hay operaciones cerradas.</div>'}
-    <div class="note">Cada operación arriesga siempre ${fmtPct(CFG.RISK_PCT / 100, 1, false)} de los ${fmtEur(CFG.CAPITAL)} iniciales (${fmtEur(RISK_EUR)} = 1R), sin interés compuesto. Beneficio de cada operación = RR final × ${fmtEur(RISK_EUR)}.${annualNote}</div>
+    <div class="note">Cada operación arriesga el % indicado en su columna Riesgo sobre los ${fmtEur(CFG.CAPITAL)} iniciales, sin interés compuesto: beneficio = RR final × riesgo × ${fmtEur(CFG.CAPITAL)} (un TP de 1R al 2% suma ${fmtEur(2000, true)}; un SL de −1R al 1% resta ${fmtEur(1000)}).${annualNote}</div>
   </div>`;
 }
 
@@ -819,7 +839,7 @@ function renderPairs(M) {
       <td class="strong">${esc(p.par)}</td><td>${p.n}</td><td>${p.w}</td><td>${p.l}</td>${hasBE ? `<td>${p.b}</td>` : ''}
       <td class="strong ${edgeCls(p.expR)}">${fmtPct(p.wr, 0, false)}</td>
       <td class="${signCls(p.pnl)}">${fmtEur(p.pnl, true)}</td>
-      <td class="${edgeCls(p.expR)}">${fmtPF(p.pf)}</td></tr>`).join('');
+      <td class="${pfCls(p.pf)}">${fmtPF(p.pf)}</td></tr>`).join('');
   const small = M.pairs.filter(p => p.n < 10).length;
   return `${sec('03', 'Calidad del Sistema')}
   <div class="panel">${panelHead('Rendimiento por Par', 'Ordenado por win rate')}
@@ -827,6 +847,23 @@ function renderPairs(M) {
       <thead><tr><th>Par</th><th>Ops</th><th>TP</th><th>SL</th>${hasBE ? '<th>BE</th>' : ''}<th>Win Rate</th><th>Beneficio</th><th>Profit Factor</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     ${small ? `<div class="note" style="padding-top:12px">${small} de ${M.pairs.length} pares tienen menos de 10 operaciones: con muestras tan pequeñas el win rate de cada par es sobre todo ruido estadístico, no una ventaja confirmada.</div>` : ''}
+  </div>
+  ${renderRiskLevels(M)}`;
+}
+
+function renderRiskLevels(M) {
+  if (!M.riskLevels.length) return '';
+  const totPnl = M.riskLevels.reduce((s, o) => s + o.pnl, 0);
+  const rows = M.riskLevels.map(o => `<tr>
+      <td class="strong">${fmtRisk(o.risk)}</td><td>${o.n}</td><td>${o.w}</td><td>${o.l}</td>
+      <td class="strong ${edgeCls(o.expR)}">${fmtPct(o.wr, 0, false)}</td><td>${fmtR(o.expR)}</td>
+      <td class="${signCls(o.pnl)}">${fmtEur(o.pnl, true)}</td>
+      <td class="c-muted">${Math.abs(totPnl) > EPS ? fmtPct(o.pnl / totPnl, 0, false) : '—'}</td></tr>`).join('');
+  return `<div class="panel">${panelHead('Rendimiento por Riesgo', 'Según el riesgo de cada operación')}
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th>Riesgo</th><th>Ops</th><th>TP</th><th>SL</th><th>Win Rate</th><th>RR medio</th><th>Beneficio</th><th>% del beneficio</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="note" style="padding-top:12px">Muestra si las operaciones en las que arriesgas más rinden mejor (en RR) que el resto. El RR medio no depende del tamaño; el beneficio sí, porque el mismo RR al 3% vale el triple que al 1%.</div>
   </div>`;
 }
 
@@ -843,7 +880,7 @@ function renderRisk(M) {
       + kv('Drawdown en escenario adverso', `Percentil 95: solo 1 de cada 20 simulaciones lo supera · próximas ${mc.H} ops`, fmtPct(-mc.p95, 1), `mediana ${fmtPct(-mc.p50, 1)}`, 'c-bad')
     : kv(`Probabilidad de DD ≥ ${ddLim}`, 'Monte Carlo: necesita al menos 10 operaciones cerradas', '—', '', 'c-muted')
       + kv('Drawdown en escenario adverso', 'Monte Carlo: necesita al menos 10 operaciones cerradas', '—', '', 'c-muted');
-  const seq = tr.map(t => `<div class="sq ${t.out}" title="N·${esc(t.nraw)} · ${fmtDate(t.day)} · ${esc(t.par)} · ${fmtR(t.R, 1)}">${outLabel(t.out)}</div>`).join('');
+  const seq = tr.map(t => `<div class="sq ${t.out}" title="N·${esc(t.nraw)} · ${fmtDate(t.day)} · ${esc(t.par)} · ${fmtR(t.R, 1)} al ${fmtRisk(t.risk)} · ${fmtEur(t.pnl, true)}">${outLabel(t.out)}</div>`).join('');
   return `${sec('04', 'Gestión del Riesgo')}
   ${tr.length ? `<div class="panel">${panelHead('Drawdown', 'Caída desde el máximo previo de capital')}
     <div class="chart-pad"><div class="chart" style="height:190px"><canvas id="ddChart" role="img" aria-label="Drawdown desde máximos"></canvas></div></div>
@@ -915,7 +952,7 @@ function renderCurrent(M) {
   const T = M.totals;
   const last = M.rolling.length ? M.rolling[M.rolling.length - 1] : null;
   const lastExp = last == null ? null : mean(M.trades.slice(-CFG.ROLL_WIN).map(t => t.R));
-  const openRows = M.open.slice().reverse().map(t => `<tr><td class="strong">N·${esc(t.nraw)}</td><td class="l">${esc(t.par)}</td><td class="l">${esc(t.dir) || '—'}</td><td class="l">${fmtDate(t.day)}</td><td>${t.day == null ? '—' : `${M.today - t.day} ${plural(M.today - t.day, 'día', 'días')}`}</td><td class="l">${esc(t.tipo) || '—'}</td></tr>`).join('');
+  const openRows = M.open.slice().reverse().map(t => `<tr><td class="strong">N·${esc(t.nraw)}</td><td class="l">${esc(t.par)}</td><td class="l">${esc(t.dir) || '—'}</td><td class="l">${fmtDate(t.day)}</td><td>${t.day == null ? '—' : `${M.today - t.day} ${plural(M.today - t.day, 'día', 'días')}`}</td><td>${fmtRisk(t.risk)}</td><td class="l">${esc(t.tipo) || '—'}</td></tr>`).join('');
   return `${sec('06', 'Estado Actual')}
   <div class="panel">${panelHead('Win Rate Móvil', `Ventana de ${CFG.ROLL_WIN} operaciones`)}
     ${last == null ? `<div class="empty">Necesita al menos ${CFG.ROLL_WIN} operaciones cerradas.</div>` : `
@@ -925,21 +962,21 @@ function renderCurrent(M) {
       <span><i class="k-dash" style="border-color:var(--text2)"></i>Global: ${fmtPct(T.wr, 1, false)}</span>
       ${T.beWr != null ? `<span><i class="k-dash" style="border-color:var(--bad)"></i>Break-even: ${fmtPct(T.beWr, 0, false)}</span>` : ''}
     </div>
-    ${T.beWr != null ? `<div class="note">Break-even: win rate mínimo para no perder dinero con tu ganancia y pérdida medias actuales (${fmtR(T.avgWinR)} / ${fmtR(-T.avgLossR)}). Mantenerse por debajo de esa línea con el mismo ratio significa perder dinero.</div>` : ''}`}
+    ${T.beWr != null ? `<div class="note">Break-even: win rate mínimo para no perder dinero con tu ganancia y pérdida medias actuales (${fmtEur(T.avgWinEur, true)} / ${fmtEur(-T.avgLossEur, true)} por operación). Mantenerse por debajo de esa línea con el mismo ratio significa perder dinero.</div>` : ''}`}
   </div>
   <div class="panel">${panelHead('Operaciones Abiertas', `${M.open.length} ${plural(M.open.length, 'abierta', 'abiertas')}`)}
-    ${M.open.length ? `<div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Par</th><th class="l">Dirección</th><th class="l">Entrada</th><th>Abierta</th><th class="l">Tipo</th></tr></thead><tbody>${openRows}</tbody></table></div>` : '<div class="empty">Sin operaciones abiertas.</div>'}
+    ${M.open.length ? `<div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Par</th><th class="l">Dirección</th><th class="l">Entrada</th><th>Abierta</th><th>Riesgo</th><th class="l">Tipo</th></tr></thead><tbody>${openRows}</tbody></table></div>` : '<div class="empty">Sin operaciones abiertas.</div>'}
   </div>`;
 }
 
 function renderLog(M) {
   if (!M.trades.length) return '';
   const rows = M.trades.slice().reverse().map(t => `<tr><td class="strong">N·${esc(t.nraw)}</td><td class="l">${fmtDate(t.day)}</td><td class="l">${esc(t.par)}</td>
-    <td class="l strong ${t.out === 'w' ? 'c-good' : t.out === 'l' ? 'c-bad' : 'c-warn'}">${outLabel(t.out)}</td><td>${fmtR(t.R, 1)}</td><td class="${signCls(t.pnl)}">${fmtEur(t.pnl, true)}</td><td>${fmtEur(t.eq)}</td>
+    <td class="l strong ${t.out === 'w' ? 'c-good' : t.out === 'l' ? 'c-bad' : 'c-warn'}">${outLabel(t.out)}</td><td>${fmtRisk(t.risk)}</td><td>${fmtR(t.R, 1)}</td><td class="${signCls(t.pnl)}">${fmtEur(t.pnl, true)}</td><td>${fmtEur(t.eq)}</td>
     <td class="l">${esc(t.dir) || '—'}</td><td class="l">${esc(t.tipo) || '—'}</td></tr>`).join('');
   return `${sec('07', 'Registro de Operaciones')}
   <details class="panel"><summary><span class="panel-t">Ver las ${M.trades.length} operaciones cerradas</span>${ICON_CHEV}</summary>
-    <div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Fecha</th><th class="l">Par</th><th class="l">Resultado</th><th>R</th><th>Beneficio</th><th>Capital</th><th class="l">Dirección</th><th class="l">Tipo</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Fecha</th><th class="l">Par</th><th class="l">Resultado</th><th>Riesgo</th><th>R</th><th>Beneficio</th><th>Capital</th><th class="l">Dirección</th><th class="l">Tipo</th></tr></thead><tbody>${rows}</tbody></table></div>
   </details>`;
 }
 
@@ -948,29 +985,28 @@ function renderMethod(M) {
   const byN = (a, b) => { const x = parseNum(a), y = parseNum(b); return (Number.isNaN(x) || Number.isNaN(y)) ? String(a).localeCompare(String(b)) : x - y; };
   const list = arr => { const s = arr.slice().sort(byN); return s.slice(0, 12).map(n => 'N·' + esc(n)).join(', ') + (s.length > 12 ? '…' : ''); };
   const ops = n => `${n} ${plural(n, 'operación', 'operaciones')}`;
-  const riskTxt = fmtPct(CFG.RISK_PCT / 100, 1, false);
   const items = [];
   const dup = M.rawCount - M.uniqueCount;
   if (dup > 0) items.push(`${dup} ${plural(dup, 'fila repetida', 'filas repetidas')} en la fuente (ediciones sucesivas de la misma operación): se usa la última versión de cada N·.`);
   if (I.dayMismatch.length) items.push(`${ops(I.dayMismatch.length)} con "Día Entrada" distinto del día de la semana de su fecha (${list(I.dayMismatch)}). El mapa de calor usa "Día Entrada"; meses y semanas usan la fecha. Conviene revisarlas en Notion.`);
   if (I.assumed.length) items.push(`${ops(I.assumed.length)} con resultado pero sin RR final (${list(I.assumed)}): se ha asumido ±1R.`);
   if (I.inconsistent.length) items.push(`${ops(I.inconsistent.length)} con un RR final que contradice el resultado (${list(I.inconsistent)}): se usa el RR final.`);
-  if (I.riskDiff.length) items.push(`${ops(I.riskDiff.length)} con un riesgo anotado distinto de ${riskTxt} (${list(I.riskDiff)}): el dashboard calcula todas con ${riskTxt}.`);
+  if (I.noRisk.length) items.push(`${ops(I.noRisk.length)} sin un riesgo válido en la columna Riesgo (${list(I.noRisk)}): se ha asumido ${fmtRisk(CFG.DEFAULT_RISK_PCT)}.`);
   if (I.noDate.length) items.push(`${ops(I.noDate.length)} sin fecha válida (${list(I.noDate)}): cuentan en los totales, pero no en meses ni semanas.`);
   if (I.otherRes.length) items.push(`${ops(I.otherRes.length)} con un resultado no reconocido y sin RR (${list(I.otherRes)}): ${plural(I.otherRes.length, 'excluida', 'excluidas')} de los cálculos.`);
   return `${sec('08', 'Metodología')}
   <details class="panel"><summary><span class="panel-t">Cómo se calcula cada métrica${items.length ? ` · ${items.length} ${plural(items.length, 'aviso', 'avisos')} de datos` : ''}</span>${ICON_CHEV}</summary>
     <div class="method">
       <dl>
-        <dt>Riesgo y beneficio</dt><dd>Riesgo fijo de ${fmtEur(RISK_EUR)} por operación (1R = ${fmtPct(CFG.RISK_PCT / 100, 1, false)} de ${fmtEur(CFG.CAPITAL)}), sin interés compuesto. Beneficio = RR final × ${fmtEur(RISK_EUR)}.</dd>
-        <dt>Win Rate y break-even</dt><dd>Ganadoras / operaciones cerradas (los BE cuentan en el total). Break-even = pérdida media / (ganancia media + pérdida media), en R, ajustado por la proporción de BE: el win rate mínimo para no perder dinero con el ratio real del sistema.</dd>
-        <dt>Profit Factor y Esperanza</dt><dd>Beneficio bruto / pérdida bruta. Esperanza = beneficio medio por operación (en € y en R).</dd>
+        <dt>Riesgo y beneficio</dt><dd>Cada operación usa su propio riesgo (columna Riesgo, en % del capital inicial de ${fmtEur(CFG.CAPITAL)}), sin interés compuesto. Beneficio = RR final × riesgo × ${fmtEur(CFG.CAPITAL)}. Si una fila no tiene un riesgo válido (entre ${fmtRisk(CFG.RISK_MIN)} y ${fmtRisk(CFG.RISK_MAX)}) se asume ${fmtRisk(CFG.DEFAULT_RISK_PCT)} y se avisa abajo.</dd>
+        <dt>Win Rate y break-even</dt><dd>Ganadoras / operaciones cerradas (los BE cuentan en el total). Break-even = pérdida media / (ganancia media + pérdida media), en €, ajustado por la proporción de BE: el win rate mínimo para no perder dinero con tus ganancias y pérdidas medias reales.</dd>
+        <dt>Profit Factor y Esperanza</dt><dd>Profit factor = beneficio bruto / pérdida bruta, en €. Esperanza = beneficio medio por operación en €; el RR medio es la media del RR final (resultado medido en múltiplos del riesgo de cada operación, independiente de cuánto arriesgaste).</dd>
         <dt>Drawdown</dt><dd>Mayor caída del capital desde un máximo previo hasta el mínimo posterior, medida al cierre de cada operación (no incluye pérdidas flotantes).</dd>
         <dt>Rentabilidad mensual</dt><dd>Beneficio del mes / capital al inicio del mes (TWR). Se incluyen los meses sin operar (0%). Las estadísticas mensuales usan solo meses cerrados.</dd>
         <dt>Sharpe y Sortino</dt><dd>Sharpe = media mensual / desviación típica muestral × √12 (tipo libre de riesgo 0%). Sortino = media mensual / desviación a la baja × √12, con la desviación a la baja calculada sobre todos los meses (objetivo 0%). Se marcan como muestra corta hasta tener 12 meses cerrados.</dd>
         <dt>Rentabilidad anualizada y Calmar</dt><dd>Solo con 12 meses o más de historial: las rentabilidades de periodos inferiores a un año no se anualizan (norma GIPS). CAGR = (capital final / inicial)<sup>365,25 / días</sup> − 1. Calmar = CAGR / Max Drawdown.</dd>
-        <dt>Monte Carlo</dt><dd>${fmtNum(CFG.MC_PATHS, 0)} simulaciones de las próximas operaciones (≈ 12 meses al ritmo actual) remuestreando tus propios resultados con pesos aleatorios (bootstrap bayesiano), lo que incorpora la incertidumbre del win rate por tener una muestra pequeña. El drawdown se mide desde el máximo de capital (incluido el drawdown actual, si lo hay). Supone operaciones independientes y el mismo riesgo fijo; es una estimación, no una garantía.</dd>
-        <dt>Colores</dt><dd>Verde: esperanza ≥ +${fmtNum(CFG.EDGE_GOOD_R, 1)}R por operación. Ámbar: entre 0 y +${fmtNum(CFG.EDGE_GOOD_R, 1)}R. Rojo: negativa. En un sistema 1:1 equivale a win rate ≥ 60%, 50–60% y &lt; 50%.</dd>
+        <dt>Monte Carlo</dt><dd>${fmtNum(CFG.MC_PATHS, 0)} simulaciones de las próximas operaciones (≈ 12 meses al ritmo actual) remuestreando tus propios resultados en € (cada uno con el riesgo que usaste) con pesos aleatorios (bootstrap bayesiano), lo que incorpora la incertidumbre del win rate por tener una muestra pequeña. El drawdown se mide desde el máximo de capital (incluido el drawdown actual, si lo hay). Supone operaciones independientes y la misma mezcla de riesgos que hasta ahora; es una estimación, no una garantía.</dd>
+        <dt>Colores</dt><dd>Win rate: según la esperanza en R (RR medio): verde ≥ +${fmtNum(CFG.EDGE_GOOD_R, 1)}R, ámbar entre 0 y +${fmtNum(CFG.EDGE_GOOD_R, 1)}R, rojo negativa; en un sistema 1:1 equivale a win rate ≥ 60%, 50–60% y &lt; 50%. Profit factor: verde ≥ 1,5, ámbar entre 1 y 1,5, rojo &lt; 1.</dd>
         <dt>Asignación temporal</dt><dd>Las operaciones se ordenan y se asignan a meses y semanas por su fecha de entrada. La semana operativa empieza el domingo con la apertura del mercado.</dd>
       </dl>
       <h4>Control de datos</h4>
@@ -987,7 +1023,7 @@ function renderAll(M) {
   $('content').innerHTML = `<div id="banner"></div>`
     + renderKpis(M) + renderEquity(M) + renderMonthly(M) + renderPairs(M) + renderRisk(M)
     + renderEfficiency(M) + renderCurrent(M) + renderLog(M) + renderMethod(M)
-    + `<footer class="footer"><span>Riesgo fijo ${fmtEur(RISK_EUR)} por operación sobre ${fmtEur(CFG.CAPITAL)} · Datos de operaciones cerradas</span><span>Datos a ${fmtDate(M.today)}</span></footer>`;
+    + `<footer class="footer"><span>Capital de referencia ${fmtEur(CFG.CAPITAL)} · Riesgo de cada operación según su columna Riesgo · Sin interés compuesto</span><span>Datos a ${fmtDate(M.today)}</span></footer>`;
   requestAnimationFrame(() => drawCharts(M));
 }
 
@@ -1103,7 +1139,7 @@ function drawCharts(M) {
       label: it => {
         if (it.dataIndex === 0) return `Capital: ${fmtEur(CFG.CAPITAL)}`;
         const x = tr[it.dataIndex - 1];
-        return [`Capital: ${fmtEur(x.eq)}`, `${outLabel(x.out)} ${fmtR(x.R, 1)} (${fmtEur(x.pnl, true)})`, `${x.par}${x.dir ? ' · ' + x.dir : ''} · N·${x.nraw}`];
+        return [`Capital: ${fmtEur(x.eq)}`, `${outLabel(x.out)} ${fmtR(x.R, 1)} al ${fmtRisk(x.risk)} de riesgo (${fmtEur(x.pnl, true)})`, `${x.par}${x.dir ? ' · ' + x.dir : ''} · N·${x.nraw}`];
       }
     };
     charts.push(new Chart(eqC, {
