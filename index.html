@@ -1,1461 +1,1304 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trading Dashboard · En Vivo</title>
+<title>Trading Performance</title>
+<script>
+  // Tema antes de pintar nada (evita el destello claro/oscuro)
+  (function () {
+    try {
+      var t = localStorage.getItem('trading_theme');
+      document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+    } catch (e) { /* almacenamiento bloqueado: se queda en claro */ }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #070A0F;
-    --panel: #0E1318;
-    --panel2: #131920;
-    --border: #1A2230;
-    --borderHi: #263040;
-    --green: #00D49A;
-    --red: #FF4C5E;
-    --yellow: #FFB547;
-    --blue: #4BA3E3;
-    --muted: #3A4A5C;
-    --text: #DCE8F5;
-    --textSub: #5A7A9A;
-    --dani: #4BA3E3;
-    --sergio: #00D49A;
-    --ds: #FF4C5E;
+    --bg: #F3F5F8; --panel: #FFFFFF; --panel2: #F7F9FB; --border: #E3E8EE; --border2: #CDD5DF; --grid: #EEF1F5;
+    --text: #0F1B2C; --text2: #4B5B70; --muted: #5F6E82;
+    --accent: #2A7CC7; --accent-text: #1F64A6; --accent-soft: rgba(42,124,199,.10); --accent-rgb: 42,124,199;
+    --good: #12A37F; --good-text: #08785C; --good-rgb: 18,163,127;
+    --bad: #E04A5C; --bad-text: #C0283C; --bad-rgb: 224,74,92;
+    --warn: #B97F0F; --warn-text: #8A5D00; --warn-rgb: 226,162,58;
+    --bar: #7C8CA3;
+    --shadow: 0 1px 2px rgba(16,27,44,.04);
+    color-scheme: light;
   }
-  :root.light {
-    --bg: #F5F7FA;
-    --panel: #FFFFFF;
-    --panel2: #EEF1F5;
-    --border: #DDE3EC;
-    --borderHi: #C8D0DC;
-    --green: #00A87A;
-    --red: #E03348;
-    --yellow: #D4920A;
-    --blue: #2A7CC7;
-    --muted: #A0AEBB;
-    --text: #1A2433;
-    --textSub: #6B7E95;
-    --dani: #2A7CC7;
-    --sergio: #00A87A;
-    --ds: #E03348;
+  :root[data-theme="dark"] {
+    --bg: #0A0E13; --panel: #121820; --panel2: #171F29; --border: #222C38; --border2: #2F3B4A; --grid: #1B232D;
+    --text: #E6ECF3; --text2: #A9B6C6; --muted: #8392A5;
+    --accent: #4BA3E3; --accent-text: #6DB5EA; --accent-soft: rgba(75,163,227,.14); --accent-rgb: 75,163,227;
+    --good: #25C391; --good-text: #3DD6A6; --good-rgb: 37,195,145;
+    --bad: #F25A6C; --bad-text: #FF8090; --bad-rgb: 242,90,108;
+    --warn: #F0B444; --warn-text: #F4C66A; --warn-rgb: 240,180,68;
+    --bar: #5E7088;
+    --shadow: none;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.45; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  button, input { font-family: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+  .c-good { color: var(--good-text); } .c-bad { color: var(--bad-text); } .c-warn { color: var(--warn-text); }
+  .c-muted { color: var(--muted); } .c-text { color: var(--text); }
+  .hidden { display: none !important; }
+  .nw { white-space: nowrap; }
 
-  /* SETUP */
-  .setup-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .setup-box { max-width: 580px; width: 100%; }
-  .setup-tag { font-size: 10px; color: var(--blue); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; }
-  .setup-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
-  .setup-sub { font-size: 13px; color: var(--textSub); line-height: 1.7; margin-bottom: 28px; }
-  .step-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; }
-  .step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .step-num { background: rgba(75,163,227,0.15); color: var(--blue); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-  .step-t { font-size: 13px; font-weight: 600; }
-  .step-list { padding-left: 34px; display: flex; flex-direction: column; gap: 5px; }
-  .step-list p { font-size: 12px; color: var(--textSub); display: flex; gap: 8px; }
-  .url-row { display: flex; gap: 8px; margin-top: 24px; }
-  .url-row input { flex: 1; background: var(--panel); border: 1px solid var(--borderHi); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--text); font-family: 'Inter', 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; outline: none; }
-  .url-row input:focus { border-color: var(--blue); }
-  .url-row button { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: 'DM Sans', sans-serif; transition: opacity 0.2s; }
-  .url-row button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .hint-box { background: rgba(0,212,154,0.08); border: 1px solid rgba(0,212,154,0.2); border-radius: 8px; padding: 11px 14px; margin-top: 12px; font-size: 11px; color: var(--green); line-height: 1.6; }
-  .err { font-size: 12px; color: var(--red); margin-top: 8px; }
+  /* ── Acceso ─────────────────────────────────────── */
+  .gate { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .gate-box { width: 100%; max-width: 320px; text-align: center; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-text); }
+  .gate h1 { font-size: 24px; font-weight: 700; letter-spacing: -.02em; margin: 10px 0 6px; }
+  .gate p { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+  .field { width: 100%; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border2); background: var(--panel); color: var(--text); font-size: 14px; outline: none; }
+  .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .gate .field { text-align: center; margin-bottom: 10px; }
+  .btn-primary { width: 100%; height: 44px; border: none; border-radius: 10px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .gate-err { min-height: 18px; margin-top: 10px; font-size: 12px; color: var(--bad-text); }
 
-  /* DASHBOARD */
-  .dash { padding: 0 0 60px; display: none; }
-  .topbar { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
-  .topbar h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-  .topbar p { font-size: 11px; color: var(--textSub); margin-top: 3px; }
-  .top-btns { display: flex; gap: 8px; }
-  .top-btns button { background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: 7px 14px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
-  .top-btns button:hover { background: var(--panel2); }
-  .theme-btn { min-width: 36px; font-size: 15px !important; padding: 7px 10px !important; }
-  .content { padding: 0 32px; }
+  /* ── Modal configuración ────────────────────────── */
+  .modal { position: fixed; inset: 0; background: rgba(5,10,16,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { position: relative; width: 100%; max-width: 480px; background: var(--panel); border: 1px solid var(--border2); border-radius: 14px; padding: 26px 26px 22px; }
+  .modal-box h2 { font-size: 18px; font-weight: 600; margin: 8px 0 6px; }
+  .modal-box p { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+  .modal-row { display: flex; gap: 8px; }
+  .modal-row .field { height: 40px; font-size: 12px; }
+  .modal-row .btn-primary { width: auto; height: 40px; padding: 0 18px; font-size: 13px; }
+  .modal-x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .modal-x:hover { background: var(--panel2); color: var(--text); }
+  .link-btn { margin-top: 12px; background: none; border: none; color: var(--accent-text); font-size: 12px; cursor: pointer; padding: 0; }
+  .modal-err { font-size: 12px; color: var(--bad-text); margin-top: 8px; min-height: 16px; }
 
-  /* KPIs */
-  .kpis { display: grid; grid-template-columns: repeat(6,1fr); gap: 9px; margin: 22px 0; }
-  .kpi { background: var(--panel); border-radius: 10px; padding: 14px 16px; }
-  .kpi-l { font-size: 10px; color: var(--textSub); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
-  .kpi-v { font-size: 24px; font-weight: 500; font-family: 'Inter', 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.02em; }
-  .kpi-s { font-size: 11px; color: var(--textSub); margin-top: 5px; }
-
-  /* SECTION TITLE */
-  .sec { display: flex; align-items: center; gap: 10px; margin: 28px 0 14px; }
-  .sec-n { background: rgba(75,163,227,0.15); color: var(--blue); border-radius: 5px; padding: 2px 9px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
-  .sec-t { font-size: 15px; font-weight: 600; }
-  .sec-l { flex: 1; height: 1px; background: var(--border); }
-
-  /* CARDS */
-  .cards3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 16px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
-  .card-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .card-t { font-size: 15px; font-weight: 700; }
-  .badge { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 4px; letter-spacing: 0.04em; }
-  .kv { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
-  .kv-l { font-size: 11px; color: var(--textSub); }
-  .kv-v { font-size: 13px; font-weight: 500; font-family: 'Inter', 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-
-  /* PANEL */
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
-  .panel-h { padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
-  .panel-body { padding: 14px 18px; }
-
-  /* TABLE */
-  .tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .tbl th { padding: 9px 14px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--textSub); font-weight: 600; background: var(--bg); }
-  .tbl th.r, .tbl td.r { text-align: center; }
-  .tbl td { padding: 9px 14px; border-top: 1px solid var(--border); }
-  .tbl tr:hover td { background: rgba(255,255,255,0.02); }
-
-  /* HEATMAP */
-  .heatrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-  .heat-wrap { flex: 1; height: 28px; background: var(--border); border-radius: 5px; overflow: hidden; position: relative; }
-  .heat-bar { height: 100%; border-radius: 5px; }
-  .heat-lbl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--textSub); font-weight: 500; font-family: 'Inter','DM Sans',sans-serif; font-variant-numeric: tabular-nums; }
-
-  /* SEQUENCE */
-  .seq { display: flex; flex-wrap: wrap; gap: 5px; padding: 14px 18px; }
-  .sq { width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; cursor: default; }
-
-  /* GRID 2 */
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-
-  /* OPEN */
-  .open-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 12px; background: var(--panel2); }
-
-  /* FOOTER */
-  .footer { margin-top: 28px; padding: 14px 0; border-top: 1px solid var(--border); display: flex; justify-content: space-between; }
-  .footer span { font-size: 10px; color: var(--muted); }
-
-  /* LOADING */
-  .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 12px; }
-  .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  /* ── Carga ──────────────────────────────────────── */
+  .loading { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; background: var(--bg); z-index: 500; }
+  .spinner { width: 30px; height: 30px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  .loading p { font-size: 13px; color: var(--text2); }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  /* ── MOBILE RESPONSIVE ─────────────────────────── */
-  @media (max-width: 768px) {
-    body { padding: 0; }
-    .topbar { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; }
-    .topbar h1 { font-size: 15px; }
-    #topSub { font-size: 10px; }
-    .top-btns { flex-wrap: wrap; gap: 5px; }
-    .top-btns button { font-size: 11px; padding: 4px 9px; }
-    .dash { padding: 8px; }
-    .sec-t { font-size: 12px; }
-    .kpis { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
-    .kpi { padding: 9px 10px; }
-    .kpi-v { font-size: 17px !important; }
-    .kpi-l, .kpi-s { font-size: 9px; }
-    .cards3 { grid-template-columns: 1fr !important; }
-    .grid2 { grid-template-columns: 1fr !important; }
-    .panel-h { font-size: 11px; padding: 9px 12px; }
-    .tbl { font-size: 10px; }
-    .tbl th, .tbl td { padding: 5px 7px !important; white-space: nowrap; }
-    .seq { padding: 8px 10px; gap: 4px; }
-    .sq { width: 30px; height: 30px; font-size: 9px; border-radius: 5px; }
-    .card { padding: 10px 12px; }
-    .footer { font-size: 9px; padding: 8px 12px; flex-direction: column; gap: 3px; text-align: center; }
+  /* ── Barra superior ─────────────────────────────── */
+  .topbar { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); }
+  @supports (backdrop-filter: blur(8px)) {
+    .topbar { background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); }
   }
-  @media (max-width: 480px) {
-    .kpis { grid-template-columns: repeat(2, 1fr) !important; }
-    .kpi-v { font-size: 15px !important; }
+  .topbar-in { max-width: 1280px; margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand h1 { font-size: 17px; font-weight: 700; letter-spacing: -.015em; }
+  .brand p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+  .btn:hover { border-color: var(--border2); }
+  .btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .btn.icon { width: 34px; padding: 0; justify-content: center; }
+  .btn[disabled] { opacity: .65; cursor: default; }
+  .btn.busy svg { animation: spin .8s linear infinite; }
+
+  /* ── Contenido ──────────────────────────────────── */
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 22px 28px 56px; transition: opacity .2s; }
+  .wrap.dim { opacity: .55; pointer-events: none; }
+  .banner { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 12.5px; background: rgba(var(--bad-rgb), .10); border: 1px solid rgba(var(--bad-rgb), .28); color: var(--bad-text); }
+
+  .kgroup { margin-bottom: 14px; }
+  .kgroup-l { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 7px 2px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 13px; box-shadow: var(--shadow); min-width: 0; }
+  .kpi-l { font-size: 12px; font-weight: 500; color: var(--text2); }
+  .kpi-v { font-size: 25px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; margin-top: 6px; white-space: nowrap; }
+  .kpi-s { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .kpi-s.c-warn { color: var(--warn-text); }
+
+  .sec { display: flex; align-items: center; gap: 10px; margin: 32px 0 12px; }
+  .sec-n { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--accent-text); background: var(--accent-soft); border-radius: 6px; padding: 3px 8px; }
+  .sec-t { font-size: 16px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+  .sec-l { flex: 1; height: 1px; background: var(--border); }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 12px; }
+  .panel-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--border); }
+  .panel-t { font-size: 13px; font-weight: 600; }
+  .panel-n { font-size: 11.5px; color: var(--muted); text-align: right; }
+  .panel-b { padding: 14px 18px; }
+  .note { font-size: 11.5px; color: var(--muted); line-height: 1.55; padding: 0 18px 14px; }
+  .note b { color: var(--text2); font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .grid2 > .panel { margin-bottom: 0; }
+
+  .strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 14px 18px 2px; }
+  .cell { background: var(--panel2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; min-width: 0; }
+  .cell-l { font-size: 11px; font-weight: 500; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell-v { font-size: 15.5px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+
+  .chart { position: relative; width: 100%; }
+  .chart-pad { padding: 10px 14px 6px 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 2px 18px 14px; font-size: 11.5px; color: var(--text2); }
+  .legend > span { display: inline-flex; align-items: center; gap: 7px; }
+  .k-line { width: 18px; height: 2px; border-radius: 2px; display: inline-block; }
+  .k-dash { width: 18px; height: 0; border-top: 2px dashed; display: inline-block; }
+  .k-box { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+  .tbl th { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: right; padding: 9px 14px; background: var(--panel2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tbl td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tbl th:first-child, .tbl td:first-child, .tbl th.l, .tbl td.l { text-align: left; }
+  .tbl tbody tr:last-child td { border-bottom: none; }
+  .tbl tbody tr:hover td { background: var(--panel2); }
+  .tbl .strong { font-weight: 600; }
+
+  .mt th, .mt td { text-align: center; padding: 8px 10px; }
+  .mt th:first-child, .mt td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); text-align: left; padding-left: 18px; min-width: 112px; }
+  .mt th:first-child { background: var(--panel2); }
+  .mt tbody tr:hover td { background: inherit; }
+  .mt tbody tr:hover td:first-child { background: var(--panel); }
+  .mt td.tot, .mt th.tot { border-left: 1px solid var(--border); font-weight: 600; }
+  .mt tr.yr th { color: var(--text); font-size: 11px; }
+  .mt .cur::after { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-left: 5px; vertical-align: middle; }
+  .mt td.ret { font-weight: 600; }
+  .dot-cur { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: middle; }
+
+  .hrow { display: grid; grid-template-columns: 84px minmax(0, 1fr) 46px 78px; align-items: center; gap: 12px; padding: 5px 0; }
+  .hday { font-size: 12.5px; font-weight: 500; }
+  .htrack { position: relative; height: 28px; border-radius: 7px; background: var(--panel2); border: 1px solid var(--border); }
+  .hfill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px 4px 4px 6px; }
+  .hlbl { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: var(--text2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .hwr { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hpnl { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .seq { display: flex; flex-wrap: wrap; gap: 4px; padding: 14px 18px; }
+  .sq { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; letter-spacing: .02em; cursor: default; }
+  .sq.w { background: rgba(var(--good-rgb), .14); color: var(--good-text); }
+  .sq.l { background: rgba(var(--bad-rgb), .13); color: var(--bad-text); }
+  .sq.b { background: rgba(var(--warn-rgb), .16); color: var(--warn-text); }
+
+  .kvs { padding: 4px 18px 6px; }
+  .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .kv:last-child { border-bottom: none; }
+  .kv-l { color: var(--text2); font-size: 12.5px; }
+  .kv-l small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .kv-v { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .kv-v small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .kvs.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 44px; }
+  .kvs.two .kv:nth-last-child(-n+2) { border-bottom: none; }
+
+  .insight { margin: 4px 18px 14px; padding: 10px 12px; border-radius: 9px; background: var(--accent-soft); color: var(--text2); font-size: 12px; line-height: 1.55; }
+  .insight b { color: var(--text); font-weight: 600; }
+  .empty { padding: 18px; font-size: 12.5px; color: var(--muted); }
+
+  details.panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px; }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary .chev { width: 16px; height: 16px; color: var(--muted); transition: transform .2s; }
+  details.panel[open] > summary { border-bottom: 1px solid var(--border); }
+  details.panel[open] > summary .chev { transform: rotate(180deg); }
+  .method { padding: 6px 18px 16px; font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+  .method dt { font-weight: 600; color: var(--text); margin-top: 10px; }
+  .method dd { margin: 2px 0 0; }
+  .method h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 4px; }
+  .method ul { padding-left: 18px; }
+  .method li { margin: 3px 0; }
+
+  .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+
+  /* ── Responsive ─────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid2 { grid-template-columns: 1fr; }
+    .kvs.two { grid-template-columns: 1fr; }
+    .kvs.two .kv:nth-last-child(2) { border-bottom: 1px solid var(--border); }
+  }
+  @media (max-width: 600px) {
+    .topbar-in { padding: 10px 14px; }
+    .brand h1 { font-size: 15px; }
+    .brand p { font-size: 11px; }
+    .actions .btn .txt { display: none; }
+    .actions .btn { padding: 0; width: 34px; justify-content: center; }
+    .wrap { padding: 14px 12px 40px; }
+    .kpi { padding: 11px 12px; }
+    .kpi-v { font-size: 20px; }
+    .kpi-l { font-size: 11.5px; }
+    .kpi-s { font-size: 11px; }
+    .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 12px 2px; }
+    .strip .cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    .hrow { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "day wr pnl" "track track track"; row-gap: 5px; column-gap: 14px; padding: 7px 0; }
+    .hday { grid-area: day; } .htrack { grid-area: track; } .hwr { grid-area: wr; } .hpnl { grid-area: pnl; min-width: 72px; }
+    .sq { width: 24px; height: 24px; }
+    .sec { margin-top: 26px; }
+    .sec-t { font-size: 14.5px; }
+    .panel-h { padding: 11px 14px; }
+    .panel-b, .kvs { padding-left: 14px; padding-right: 14px; }
+    .note, .legend { padding-left: 14px; padding-right: 14px; }
+    .tbl th, .tbl td { padding: 8px 10px; }
+    .mt th:first-child, .mt td:first-child { padding-left: 14px; min-width: 96px; }
+    .hlbl { font-size: 11px; }
+    .insight { margin-left: 14px; margin-right: 14px; }
+    .seq { padding: 12px 14px; }
   }
 </style>
 </head>
 <body>
 
-<!-- Modal de configuración (oculto por defecto) -->
-<!-- PASSWORD SCREEN -->
-<div id="passwordScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
-  <div style="text-align:center;max-width:320px;width:90%">
-    <p style="font-size:10px;color:var(--blue);letter-spacing:0.14em;text-transform:uppercase;font-weight:700;margin:0 0 10px">Trading Dashboard</p>
-    <h1 style="font-size:24px;font-weight:700;color:var(--text);margin:0 0 8px;letter-spacing:-0.02em">Acceso Privado</h1>
-    <p style="font-size:13px;color:var(--textSub);margin:0 0 28px">Introduce la contraseña para continuar</p>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="pwInput" type="password" placeholder="Contraseña"
-        style="flex:1;background:var(--panel);border:1px solid var(--borderHi);border-radius:8px;padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;text-align:center"
-        onkeydown="if(event.key==='Enter')checkPw()" />
-    </div>
-    <button onclick="checkPw()"
-      style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">
-      Entrar
+<!-- Acceso privado -->
+<div id="gate" class="gate">
+  <div class="gate-box">
+    <div class="eyebrow">Trading Performance</div>
+    <h1>Acceso Privado</h1>
+    <p>Introduce la contraseña para continuar</p>
+    <input id="pwInput" class="field" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button class="btn-primary" id="pwBtn">Entrar</button>
+    <div id="pwErr" class="gate-err"></div>
+  </div>
+</div>
+
+<!-- Configuración de la fuente de datos -->
+<div id="setup" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <div class="modal-box">
+    <button class="modal-x" id="setupClose" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
-    <p id="pwErr" style="font-size:12px;color:var(--red);margin:10px 0 0;min-height:18px"></p>
-  </div>
-</div>
-
-<div id="setup"  style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:var(--panel);border:1px solid var(--borderHi);border-radius:14px;padding:28px 32px;max-width:480px;width:90%;position:relative">
-    <button onclick="closeSetup()" style="position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--textSub);font-size:18px;cursor:pointer;line-height:1">✕</button>
-    <p style="font-size:10px;color:var(--blue);letter-spacing:0.12em;text-transform:uppercase;font-weight:600;margin:0 0 8px">Configuración</p>
-    <h2 style="font-size:18px;font-weight:600;color:var(--text);margin:0 0 6px">Fuente de datos</h2>
-    <p style="font-size:13px;color:var(--textSub);margin:0 0 20px;line-height:1.6">Actualiza la conexión con tu fuente de datos.</p>
-    <div style="display:flex;gap:8px">
-      <input id="csvUrl" type="text" placeholder="URL de la fuente de datos..."
-        style="flex:1;background:var(--panel2);border:1px solid var(--borderHi);border-radius:8px;padding:9px 13px;font-size:12px;color:var(--text);font-family:'DM Mono',monospace;outline:none" />
-      <button id="btnConnect" onclick="connect()"
-        style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap">
-        Guardar
-      </button>
+    <div class="eyebrow">Configuración</div>
+    <h2 id="setupTitle">Fuente de Datos</h2>
+    <p>Dirección de la fuente de datos de tus operaciones. Se guarda en este navegador.</p>
+    <div class="modal-row">
+      <input id="csvUrl" class="field" type="text" placeholder="Dirección de la fuente de datos" spellcheck="false">
+      <button class="btn-primary" id="setupSave">Guardar</button>
     </div>
-    <div id="errMsg" class="err" style="margin-top:8px"></div>
+    <div id="setupErr" class="modal-err"></div>
+    <button class="link-btn" id="setupReset">Restaurar la fuente predeterminada</button>
   </div>
 </div>
 
-<div id="loading" class="loading" style="display:none">
+<div id="loading" class="loading hidden">
   <div class="spinner"></div>
-  <p style="font-size:13px;color:var(--textSub)">Cargando datos...</p>
+  <p>Cargando datos…</p>
 </div>
 
-<div id="dash" class="dash">
-  <div class="topbar">
-    <div>
-      <h1>Trading Performance · En Vivo</h1>
-      <p id="topSub"></p>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <div style="display:flex;gap:4px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:3px;flex-wrap:wrap">
-        <button id="filter-all" onclick="setFilter('all')"
-          style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-          Todos
+<div id="dash" class="hidden">
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="brand">
+        <h1>Trading Performance</h1>
+        <p id="topSub">&nbsp;</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="refreshBtn" title="Actualizar datos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          <span class="txt">Actualizar</span>
         </button>
-        <button id="filter-Dani" onclick="setFilter('Dani')"
-          style="background:transparent;color:var(--textSub);border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-          Dani
-        </button>
-        <button id="filter-Sergio" onclick="setFilter('Sergio')"
-          style="background:transparent;color:var(--textSub);border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-          Sergio
-        </button>
-        <button id="filter-D&S" onclick="setFilter('D&S')"
-          style="background:transparent;color:var(--textSub);border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-          D&S
+        <button class="btn icon" id="themeBtn" title="Cambiar tema" aria-label="Cambiar tema"></button>
+        <button class="btn icon" id="setupBtn" title="Fuente de datos" aria-label="Fuente de datos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
       </div>
-      <div class="top-btns">
-        <button onclick="refresh()">⟳ Actualizar</button>
-        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
-        <button onclick="showSetup()" title="Configuración">⚙</button>
-      </div>
     </div>
-  </div>
-  <div class="content" id="content"></div>
+  </header>
+  <main class="wrap" id="content"></main>
 </div>
 
 <script>
-const CSV_KEY = 'trading_csv_url';
-const DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTqa19Bu4VYmAu8tHHdraBMb9EVCl4Ok5bZtD5ITV-8FvmbIfywrOlAa5roS-hPQlKOrzbkULoIdoOC/pub?gid=2004246704&single=true&output=csv';
-let currentUrl = localStorage.getItem(CSV_KEY) || DEFAULT_URL;
-let activeCharts = [];
-let currentFilter = 'all';
-let currentRawData = null;
+'use strict';
+// @@CORE-BEGIN ─────────────────────────────────────────────────────────────
+// Núcleo de cálculo: funciones puras, sin DOM. Todas las métricas salen de aquí.
+const CFG = Object.freeze({
+  CAPITAL: 100000,        // capital de referencia (€)
+  RISK_PCT: 1.5,          // riesgo fijo por operación, % del capital inicial (sin interés compuesto)
+  ROLL_WIN: 10,           // ventana del win rate móvil (operaciones)
+  MC_PATHS: 5000,         // simulaciones Monte Carlo
+  DD_LIMIT: 0.10,         // umbral de drawdown evaluado en el Monte Carlo
+  EDGE_GOOD_R: 0.2,       // esperanza (R/op) a partir de la cual el color es verde
+  ANNUALIZE_MIN_DAYS: 365 // GIPS: no se anualizan periodos inferiores a un año
+});
+const RISK_EUR = CFG.CAPITAL * CFG.RISK_PCT / 100;
+const EPS = 1e-9;
+const DAY_MS = 86400000;
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const DAY_KEYS = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+const MONTHS = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9,
+  octubre: 10, noviembre: 11, diciembre: 12, ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8,
+  sep: 9, sept: 9, oct: 10, nov: 11, dic: 12, january: 1, february: 2, march: 3, april: 4, june: 6, july: 7,
+  august: 8, september: 9, october: 10, november: 11, december: 12, jan: 1, apr: 4, aug: 8, dec: 12
+};
 
-// ─── PARSE & COMPUTE ───────────────────────────────
+function norm(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// "1.5%", "1,5", "−1", "-0,5R" → número. Vacío o texto → NaN (nunca 0 por defecto)
+function parseNum(s) {
+  if (s == null) return NaN;
+  let t = String(s).trim().replace(/−/g, '-').replace(/%/g, '').replace(/[\s ]/g, '').replace(/[rR]$/, '');
+  if (t === '') return NaN;
+  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(/,/g, '.');
+  else if (t.includes(',')) t = t.replace(/,/g, '.');
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(t)) return NaN;
+  const v = Number(t);
+  return Number.isFinite(v) ? v : NaN;
+}
+
+function mkDay(y, m, d) {
+  if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+  const t = Date.UTC(y, m - 1, d);
+  const dt = new Date(t);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return Math.round(t / DAY_MS);
+}
+
+// Fechas → número de día (UTC, sin desfases horarios). Formatos: d/m/aaaa, aaaa-mm-dd, "13 de mayo de 2026", "May 13, 2026".
+// Sin "new Date(texto)": interpretaría 05/04 como 4 de mayo (formato EE. UU.).
 function parseDate(raw) {
-  if (!raw || raw.trim() === '') return null;
-  const s = raw.trim();
-  // DD/MM/YYYY or D/M/YYYY or D/MM/YYYY
-  const r1 = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
-  if (r1) return new Date(+r1[3], +r1[2]-1, +r1[1]);
-  // YYYY-MM-DD ISO
-  const r3 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (r3) return new Date(+r3[1], +r3[2]-1, +r3[3]);
-  // DD/MM/YY short year
-  const r4 = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2})$/);
-  if (r4) return new Date(2000 + +r4[3], +r4[2]-1, +r4[1]);
-  // "13 de mayo de 2026"
-  const months = {enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,octubre:9,noviembre:10,diciembre:11};
-  const r2 = s.toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);
-  if (r2) return new Date(+r2[3], months[r2[2]] ?? 0, +r2[1]);
-  // Try native Date as last resort
-  const native = new Date(s);
-  if (!isNaN(native)) return native;
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  let m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return mkDay(+m[1], +m[2], +m[3]);
+  if ((m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?:[ T,].*)?$/))) return mkDay(+m[3], +m[2], +m[1]);   // admite hora detrás
+  if ((m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2})(?:[ T,].*)?$/))) return mkDay(2000 + +m[3], +m[2], +m[1]);
+  const t = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if ((m = t.match(/^(\d{1,2})\s+(?:de\s+)?([a-z]+)\.?,?\s+(?:de\s+)?(\d{4})/)) && MONTHS[m[2]]) return mkDay(+m[3], MONTHS[m[2]], +m[1]);
+  if ((m = t.match(/^([a-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})/)) && MONTHS[m[1]]) return mkDay(+m[3], MONTHS[m[1]], +m[2]);
   return null;
 }
 
-function filterData(data, filter) {
-  if (filter === 'all') return data;
-  return data.filter(r => {
-    const op = (r['Operador'] || r['operador'] || '').trim();
-    if (filter === 'Dani') return op === 'Dani' || op === 'D&S';
-    if (filter === 'Sergio') return op === 'Sergio' || op === 'D&S';
-    if (filter === 'D&S') return op === 'D&S';
-    return op === filter;
-  });
+const weekdayOf = day => ((day + 4) % 7 + 7) % 7;               // 0 = domingo
+const monthIdx = day => { const d = new Date(day * DAY_MS); return d.getUTCFullYear() * 12 + d.getUTCMonth(); };
+// Semana operativa de forex: el domingo (apertura) pertenece a la semana que empieza el lunes siguiente
+const weekStart = day => { const w = weekdayOf(day); return w === 0 ? day + 1 : day - (w - 1); };
+
+function classifyResult(s) {
+  const t = norm(s);
+  if (!t) return 'none';
+  if (t.includes('takeprofit') || t === 'tp') return 'tp';
+  if (t.includes('stoploss') || t === 'sl') return 'sl';
+  if (t.includes('breakeven') || t === 'be') return 'be';
+  return 'other';
 }
 
-function setFilter(filter) {
-  currentFilter = filter;
-  // Update button styles
-  ['all','Dani','Sergio','D&S'].forEach(f => {
-    const btn = document.querySelector('[id="filter-' + f + '"]');
-    if (btn) {
-      if (f === filter) {
-        btn.style.background = 'var(--blue)';
-        btn.style.color = '#fff';
-        btn.style.borderColor = 'var(--blue)';
-      } else {
-        btn.style.background = 'var(--panel)';
-        btn.style.color = 'var(--textSub)';
-        btn.style.borderColor = 'var(--border)';
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// table: filas del CSV (la primera es la cabecera). today: número de día local.
+function buildModel(table, today) {
+  const header = (table[0] || []).map(norm);
+  const col = {};
+  header.forEach((k, i) => { if (k && !(k in col)) col[k] = i; });
+  const get = (r, k) => (col[k] != null && col[k] < r.length && r[col[k]] != null) ? String(r[col[k]]) : '';
+
+  // 1) Deduplicar: Make añade una fila nueva en cada edición → la última fila de cada N· es la vigente
+  const byN = new Map();
+  let rawCount = 0;
+  for (let i = 1; i < table.length; i++) {
+    const r = table[i];
+    if (!r || !r.some(c => String(c == null ? '' : c).trim())) continue;
+    const nraw = get(r, 'n').trim();
+    if (!nraw) continue;
+    rawCount++;
+    const nv = parseNum(nraw);
+    byN.set(Number.isNaN(nv) ? nraw : String(nv), r);
+  }
+
+  // 2) Clasificar cada operación
+  const issues = { dayMismatch: [], assumed: [], riskDiff: [], noDate: [], otherRes: [], inconsistent: [] };
+  const trades = [], open = [];
+  for (const r of byN.values()) {
+    const nraw = get(r, 'n').trim();
+    const n = parseNum(nraw);
+    const day = parseDate(get(r, 'fecha'));
+    const res = classifyResult(get(r, 'resultado'));
+    const rr = parseNum(get(r, 'rrfinal'));
+    const risk = parseNum(get(r, 'riesgo'));
+    if (!Number.isNaN(risk) && Math.abs(risk - CFG.RISK_PCT) > EPS) issues.riskDiff.push(nraw);
+    let ent = DAY_KEYS[norm(get(r, 'diaentrada'))];
+    if (ent != null && day != null && ent !== weekdayOf(day)) issues.dayMismatch.push(nraw);
+    if (ent == null && day != null) ent = weekdayOf(day);
+    const t = {
+      n, nraw, day, ent: ent == null ? null : ent,
+      par: norm(get(r, 'par')).toUpperCase(),
+      dir: get(r, 'direccion').trim(),
+      tipo: get(r, 'tipo').trim(),
+      exit: norm(get(r, 'diasalida'))
+    };
+    let R;
+    if (res === 'none' && !Number.isNaN(rr) && Math.abs(rr) < EPS) {
+      if (day == null) issues.noDate.push(nraw);      // sin resultado y RR 0: se trata como abierta (no como BE)
+      open.push(t);
+      continue;
+    }
+    if (!Number.isNaN(rr)) {
+      R = rr;
+      if ((res === 'tp' && rr <= 0) || (res === 'sl' && rr >= 0) || (res === 'be' && Math.abs(rr) > EPS)) issues.inconsistent.push(nraw);
+    } else if (res === 'tp' || res === 'sl' || res === 'be') {
+      R = res === 'tp' ? 1 : res === 'sl' ? -1 : 0;   // RR vacío: se asume el 1:1 del sistema y se avisa
+      issues.assumed.push(nraw);
+    } else if (res === 'other') {
+      issues.otherRes.push(nraw);                     // resultado desconocido sin RR: no se puede valorar
+      continue;
+    } else {
+      if (day == null) issues.noDate.push(nraw);
+      open.push(t);
+      continue;
+    }
+    if (day == null) issues.noDate.push(nraw);
+    t.R = R;
+    t.pnl = R * RISK_EUR;                             // riesgo fijo: 1R = 1,5% de 100.000 € = 1.500 €
+    t.out = R > EPS ? 'w' : R < -EPS ? 'l' : 'b';
+    trades.push(t);
+  }
+
+  // 3) Orden cronológico (fecha de entrada; a igual fecha, por N·)
+  const sk = t => [t.day == null ? 1e9 : t.day, Number.isNaN(t.n) ? 1e18 : t.n];
+  trades.sort((a, b) => { const A = sk(a), B = sk(b); return (A[0] - B[0]) || (A[1] - B[1]); });
+  open.sort((a, b) => ((a.day == null ? 1e9 : a.day) - (b.day == null ? 1e9 : b.day)) || ((Number.isNaN(a.n) ? 1e18 : a.n) - (Number.isNaN(b.n) ? 1e18 : b.n)));
+
+  const N = trades.length;
+  const wins = trades.filter(t => t.out === 'w');
+  const losses = trades.filter(t => t.out === 'l');
+  const bes = trades.filter(t => t.out === 'b');
+  const grossW = wins.reduce((s, t) => s + t.pnl, 0);
+  const grossL = -losses.reduce((s, t) => s + t.pnl, 0);
+  const net = trades.reduce((s, t) => s + t.pnl, 0);
+  const avgWinR = mean(wins.map(t => t.R));
+  const avgLossR = mean(losses.map(t => -t.R));
+  const expR = mean(trades.map(t => t.R));
+
+  // 4) Curva de capital y drawdown (sobre cierres; no incluye flotante)
+  let eq = CFG.CAPITAL, peak = CFG.CAPITAL, peakIdx = -1;
+  let maxDD = 0, ddPeak = CFG.CAPITAL, ddTrough = CFG.CAPITAL, ddPeakIdx = -1, ddTroughIdx = -1;
+  let under = 0, run = 0, longest = 0;
+  trades.forEach((t, i) => {
+    eq += t.pnl;
+    if (eq > peak + EPS) { peak = eq; peakIdx = i; }
+    const dd = (peak - eq) / peak;
+    if (dd > maxDD + EPS) { maxDD = dd; ddPeak = peak; ddTrough = eq; ddPeakIdx = peakIdx; ddTroughIdx = i; }
+    if (eq < peak - EPS) { under++; run++; longest = Math.max(longest, run); } else run = 0;
+    t.eq = eq; t.peak = peak; t.dd = dd;
+  });
+
+  // 5) Rachas (un BE corta ambas) y mayor pérdida acumulada en una racha perdedora
+  let mw = 0, ml = 0, cw = 0, cl = 0, curLoss = 0, maxLossEur = 0;
+  for (const t of trades) {
+    if (t.out === 'w') { cw++; cl = 0; curLoss = 0; }
+    else if (t.out === 'l') { cl++; cw = 0; curLoss += t.pnl; }
+    else { cw = 0; cl = 0; curLoss = 0; }
+    mw = Math.max(mw, cw); ml = Math.max(ml, cl); maxLossEur = Math.min(maxLossEur, curLoss);
+  }
+
+  // 6) Antigüedad y frecuencia (cuenta todas las entradas, abiertas incluidas)
+  const allDays = trades.concat(open).map(t => t.day).filter(d => d != null);
+  const startDay = allDays.length ? Math.min(...allDays) : today;
+  const ageDays = Math.max(0, today - startDay);
+  const totalTrades = N + open.length;
+  const opsWeek = totalTrades / (Math.max(ageDays, 7) / 7);
+
+  // 7) Meses de calendario completos (incluye meses sin operar = 0%). Rentabilidad TWR sobre el capital a inicio de mes.
+  const m0 = monthIdx(startDay), m1 = monthIdx(today);
+  const months = [];
+  let cum = 0;
+  for (let mi = m0; mi <= m1; mi++) {
+    const tt = trades.filter(t => t.day != null && monthIdx(t.day) === mi);
+    const pnl = tt.reduce((s, t) => s + t.pnl, 0);
+    const estart = CFG.CAPITAL + cum;
+    months.push({
+      mi, year: Math.floor(mi / 12), month: mi % 12, n: tt.length,
+      w: tt.filter(t => t.out === 'w').length, l: tt.filter(t => t.out === 'l').length, b: tt.filter(t => t.out === 'b').length,
+      pnl, estart, ret: pnl / estart, expR: mean(tt.map(t => t.R)), inprog: mi === m1
+    });
+    cum += pnl;
+  }
+  const closedM = months.filter(m => !m.inprog);
+  const rets = closedM.map(m => m.ret);
+  let sharpe = null, sortino = null;
+  if (rets.length >= 2) {
+    const mu = mean(rets);
+    const sd = Math.sqrt(rets.reduce((s, x) => s + (x - mu) ** 2, 0) / (rets.length - 1));   // desviación muestral (n−1)
+    if (sd > EPS) sharpe = mu / sd * Math.sqrt(12);
+    const tdd = Math.sqrt(rets.reduce((s, x) => s + Math.min(0, x) ** 2, 0) / rets.length); // desviación a la baja sobre TODOS los meses (MAR 0)
+    if (tdd > EPS) sortino = mu / tdd * Math.sqrt(12);
+  }
+  let best = null, worst = null;
+  for (const m of closedM) {
+    if (!best || m.ret > best.ret + EPS) best = m;
+    if (!worst || m.ret < worst.ret - EPS) worst = m;
+  }
+  const years = [];
+  for (const m of months) {
+    let y = years.find(o => o.year === m.year);
+    if (!y) { y = { year: m.year, growth: 1, pnl: 0, n: 0, w: 0, l: 0, b: 0, R: 0 }; years.push(y); }
+    y.growth *= (1 + m.ret); y.pnl += m.pnl; y.n += m.n; y.w += m.w; y.l += m.l; y.b += m.b;
+  }
+  years.forEach(y => {
+    y.ret = y.growth - 1;
+    y.expR = y.n ? trades.filter(t => t.day != null && Math.floor(monthIdx(t.day) / 12) === y.year).reduce((s, t) => s + t.R, 0) / y.n : null;
+  });
+
+  // 8) Métricas anualizadas: solo con ≥ 12 meses de historial (GIPS)
+  let cagr = null, calmar = null;
+  if (ageDays >= CFG.ANNUALIZE_MIN_DAYS && eq > 0) {
+    cagr = Math.pow(eq / CFG.CAPITAL, 365.25 / ageDays) - 1;
+    if (maxDD > EPS) calmar = cagr / maxDD;
+  }
+
+  // 9) Semanas operativas (incluye semanas sin operaciones)
+  const counts = new Map();
+  for (const t of trades.concat(open)) {
+    if (t.day == null) continue;
+    const k = weekStart(t.day);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const weeks = [];
+  for (let k = weekStart(startDay); k <= weekStart(today); k += 7) weeks.push({ ws: k, count: counts.get(k) || 0 });
+  weeks.forEach((w, i) => { w.ma = i < 3 ? null : (weeks[i - 3].count + weeks[i - 2].count + weeks[i - 1].count + w.count) / 4; });
+
+  // 10) Día de entrada
+  const wdMap = new Map();
+  for (const t of trades) {
+    if (t.ent == null) continue;
+    if (!wdMap.has(t.ent)) wdMap.set(t.ent, { d: t.ent, n: 0, w: 0, l: 0, b: 0, pnl: 0, R: 0 });
+    const o = wdMap.get(t.ent);
+    o.n++; o.pnl += t.pnl; o.R += t.R; o[t.out]++;
+  }
+  const weekdays = [...wdMap.values()].sort((a, b) => a.d - b.d).map(o => ({ ...o, wr: o.w / o.n, expR: o.R / o.n }));
+
+  // 11) Duración (Día Entrada → Día Salida). "Semana siguiente" no tiene día exacto: se cuenta aparte.
+  // Un cierre en la semana siguiente dura como mínimo 2 días naturales (viernes → domingo): nunca entra en "≤ 1 día".
+  // Solo si la entrada fue en viernes podría durar exactamente 2 días (amb2) → "≤ 2 días" pasa a ser una cota inferior.
+  function durStats(sub) {
+    const known = [];
+    let next = 0, unknown = 0, amb2 = 0;
+    for (const t of sub) {
+      if (t.ent == null || !t.exit) { unknown++; continue; }
+      let isNext = /^(semanasiguiente|proximasemana|siguientesemana)/.test(t.exit);
+      if (!isNext) {
+        const s = DAY_KEYS[t.exit];
+        if (s == null) { unknown++; continue; }
+        const d = s - t.ent;
+        if (d < 0) isNext = true; else known.push(d);
       }
+      if (isNext) { next++; if (t.ent >= 5) amb2++; }
+    }
+    const tot = known.length + next;
+    const n1 = known.filter(d => d <= 1).length, n2 = known.filter(d => d <= 2).length;
+    return {
+      n: sub.length, mean: mean(known), nKnown: known.length, next, unknown, tot, n2, amb2,
+      d0: known.filter(d => d === 0).length, d1: known.filter(d => d === 1).length, d2p: known.filter(d => d >= 2).length,
+      le1: tot ? n1 / tot : null, le2: tot ? n2 / tot : null
+    };
+  }
+  const dur = { w: durStats(wins), l: durStats(losses) };
+
+  // 12) Win rate móvil (ventana completa de 10)
+  const W = CFG.ROLL_WIN;
+  const rolling = trades.map((t, i) => i < W - 1 ? null : trades.slice(i - W + 1, i + 1).filter(x => x.out === 'w').length / W);
+
+  // 13) Pares
+  const pm = new Map();
+  for (const t of trades) {
+    const k = t.par || '?';
+    if (!pm.has(k)) pm.set(k, { par: k, n: 0, w: 0, l: 0, b: 0, pnl: 0, gw: 0, gl: 0, R: 0 });
+    const p = pm.get(k);
+    p.n++; p.pnl += t.pnl; p.R += t.R; p[t.out]++;
+    if (t.out === 'w') p.gw += t.pnl; else if (t.out === 'l') p.gl -= t.pnl;
+  }
+  const pairs = [...pm.values()].map(p => ({ ...p, wr: p.w / p.n, expR: p.R / p.n, pf: p.gl > EPS ? p.gw / p.gl : (p.gw > EPS ? Infinity : null) }))
+    .sort((a, b) => (b.wr - a.wr) || (b.n - a.n) || (b.pnl - a.pnl) || (a.par < b.par ? -1 : a.par > b.par ? 1 : 0));
+
+  // 14) Monte Carlo: bootstrap bayesiano de tus propias operaciones (incluye la incertidumbre del win rate)
+  let mc = null;
+  if (N >= 10) {
+    const H = Math.round(Math.min(500, Math.max(20, Math.round(opsWeek * 52))));
+    const Rs = trades.map(t => t.R);
+    const sumR = Rs.reduce((s, x) => s + x, 0);
+    const rnd = mulberry32((N * 7919 + Math.round(sumR * 100) * 104729) >>> 0);
+    const c = new Float64Array(N);
+    const mdds = new Float64Array(CFG.MC_PATHS);
+    let hits = 0;
+    for (let p = 0; p < CFG.MC_PATHS; p++) {
+      let acc = 0;
+      for (let j = 0; j < N; j++) { acc += -Math.log(1 - rnd()); c[j] = acc; }
+      let e = eq, pk = peak, mdd = (pk - e) / pk;
+      for (let h = 0; h < H; h++) {
+        const u = rnd() * acc;
+        let lo = 0, hi = N - 1;
+        while (lo < hi) { const mid = (lo + hi) >> 1; if (c[mid] < u) lo = mid + 1; else hi = mid; }
+        e += Rs[lo] * RISK_EUR;
+        if (e > pk) pk = e;
+        const dd = (pk - e) / pk;
+        if (dd > mdd) mdd = dd;
+      }
+      if (mdd >= CFG.DD_LIMIT - 1e-12) hits++;
+      mdds[p] = mdd;
+    }
+    mdds.sort();
+    mc = { H, prob: hits / CFG.MC_PATHS, p95: mdds[Math.ceil(0.95 * CFG.MC_PATHS) - 1], p50: mdds[Math.ceil(0.5 * CFG.MC_PATHS) - 1] };
+  }
+
+  return {
+    today, startDay, ageDays, trades, open, rawCount, uniqueCount: byN.size,
+    totals: {
+      N, wins: wins.length, losses: losses.length, be: bes.length, totalTrades,
+      wr: N ? wins.length / N : null,
+      // Win rate mínimo para esperanza 0 con las medias reales, en la misma base que el win rate (los BE cuentan en el total):
+      // WR·G = (1 − WR − b)·P  →  WR* = (1 − b)·P / (G + P), con b = proporción de BE
+      beWr: (avgWinR != null && avgLossR != null && avgWinR + avgLossR > EPS) ? (1 - bes.length / N) * avgLossR / (avgWinR + avgLossR) : null,
+      pf: grossL > EPS ? grossW / grossL : (grossW > EPS ? Infinity : null),
+      grossW, grossL, net, netPct: net / CFG.CAPITAL, expR, expEur: expR == null ? null : expR * RISK_EUR,
+      avgWinR, avgLossR, finalEq: eq, opsWeek
+    },
+    risk: { maxDD, ddPeak, ddTrough, ddPeakIdx, ddTroughIdx, curDD: N ? trades[N - 1].dd : 0, peak,
+            timeInDD: N ? under / N : null, longestDD: longest, maxWin: mw, maxLoss: ml, maxLossEur },
+    months, years, monthly: { nClosed: closedM.length, avg: mean(rets), best, worst, sharpe, sortino },
+    annual: { cagr, calmar, daysLeft: Math.max(0, CFG.ANNUALIZE_MIN_DAYS - ageDays) },
+    weeks, weekdays, dur, rolling, pairs, mc, issues
+  };
+}
+// @@CORE-END ───────────────────────────────────────────────────────────────
+
+/* ══════════════════════ Interfaz ══════════════════════ */
+const CSV_KEY = 'trading_csv_url';
+const DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTqa19Bu4VYmAu8tHHdraBMb9EVCl4Ok5bZtD5ITV-8FvmbIfywrOlAa5roS-hPQlKOrzbkULoIdoOC/pub?gid=2004246704&single=true&output=csv';
+const PW_KEY = 'td_auth';
+const CORRECT_PW = 'dcm';
+const THEME_KEY = 'trading_theme';
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MES_T = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MINUS = '−';
+const $ = id => document.getElementById(id);
+
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } return null; }
+let currentUrl = store(CSV_KEY) || DEFAULT_URL;
+let MODEL = null;
+let charts = [];
+let loadedAt = null;
+
+/* ── Formato (es-ES) ── */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const grp = s => s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+function fmtNum(v, dec = 2) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const s = Math.abs(v).toFixed(dec);
+  const [i, f] = s.split('.');
+  const neg = v < 0 && Number(s) !== 0;
+  return (neg ? MINUS : '') + grp(i) + (f ? ',' + f : '');
+}
+function fmtSigned(v, dec = 2) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const s = fmtNum(Math.abs(v), dec);
+  if (Number(Math.abs(v).toFixed(dec)) === 0) return s;
+  return (v > 0 ? '+' : MINUS) + s;
+}
+const fmtPct = (frac, dec = 1, signed = true) => (frac == null || !Number.isFinite(frac)) ? '—' : (signed ? fmtSigned(frac * 100, dec) : fmtNum(frac * 100, dec)) + '%';
+const fmtEur = (v, signed = false) => (v == null || !Number.isFinite(v)) ? '—' : (signed ? fmtSigned(v, 0) : fmtNum(v, 0)) + ' €';
+const fmtR = (v, dec = 2) => (v == null || !Number.isFinite(v)) ? '—' : fmtSigned(v, dec) + 'R';
+const fmtPF = v => v == null ? '—' : v === Infinity ? '∞' : fmtNum(v, 2);
+function dayParts(day) { const d = new Date(day * DAY_MS); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
+const fmtDate = day => { if (day == null) return '—'; const p = dayParts(day); return String(p.d).padStart(2, '0') + '/' + String(p.m + 1).padStart(2, '0') + '/' + p.y; };
+const fmtMonth = mi => MES[mi % 12] + ' ' + Math.floor(mi / 12);
+const signCls = v => v == null ? 'c-muted' : v > EPS ? 'c-good' : v < -EPS ? 'c-bad' : 'c-muted';
+const edgeCls = r => (r == null || !Number.isFinite(r)) ? 'c-muted' : r >= CFG.EDGE_GOOD_R - EPS ? 'c-good' : r >= -EPS ? 'c-warn' : 'c-bad';
+const plural = (n, s, p) => n === 1 ? s : p;
+function todayDay() { const n = new Date(); return mkDay(n.getFullYear(), n.getMonth() + 1, n.getDate()); }
+const outLabel = o => o === 'w' ? 'TP' : o === 'l' ? 'SL' : 'BE';
+const ICON_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+
+/* ── Bloques de HTML ── */
+function kpi(label, value, sub, cls, subCls) {
+  return `<div class="kpi"><div class="kpi-l">${label}</div><div class="kpi-v ${cls || 'c-text'}">${value}</div><div class="kpi-s ${subCls || ''}">${sub}</div></div>`;
+}
+let secCount = 0;
+function sec(_n, title) {
+  const n = String(++secCount).padStart(2, '0');
+  return `<div class="sec"><span class="sec-n">${n}</span><span class="sec-t">${title}</span><span class="sec-l"></span></div>`;
+}
+function panelHead(title, note) {
+  return `<div class="panel-h"><span class="panel-t">${title}</span>${note ? `<span class="panel-n">${note}</span>` : ''}</div>`;
+}
+
+function renderKpis(M) {
+  const T = M.totals, R = M.risk, Mo = M.monthly, A = M.annual;
+  const shortS = Mo.nClosed < 12;
+  const sampleTxt = `${Mo.nClosed} ${plural(Mo.nClosed, 'mes cerrado', 'meses cerrados')}`;
+  const sharpeSub = Mo.sharpe == null ? 'Necesita 2 meses cerrados' : shortS ? `Muestra corta: ${sampleTxt}` : `${sampleTxt} · Rf 0%`;
+  const sortinoSub = Mo.nClosed < 2 ? 'Necesita 2 meses cerrados' : Mo.sortino == null ? 'Sin meses negativos todavía' : shortS ? `Muestra corta: ${sampleTxt}` : `${sampleTxt} · MAR 0%`;
+  const calmarSub = A.calmar == null ? (A.cagr == null ? `Disponible en ${A.daysLeft} ${plural(A.daysLeft, 'día', 'días')}` : 'Sin drawdown') : 'Rent. anualizada / Max DD';
+  const beTxt = T.beWr == null ? '' : `break-even ${fmtPct(T.beWr, 0, false)}`;
+  return `
+  <div class="kgroup"><div class="kgroup-l">Rentabilidad</div><div class="kpis">
+    ${kpi('Retorno Neto', fmtPct(T.netPct, 1), `${fmtEur(T.net, true)} sobre ${fmtEur(CFG.CAPITAL)}`, signCls(T.net))}
+    ${kpi('Rent. Media Mensual', fmtPct(Mo.avg, 2), Mo.avg == null ? 'Sin meses cerrados' : `Media de ${sampleTxt}`, signCls(Mo.avg))}
+    ${kpi('Mejor Mes', Mo.best ? fmtPct(Mo.best.ret, 1) : '—', Mo.best ? fmtMonth(Mo.best.mi) : 'Sin meses cerrados', Mo.best ? signCls(Mo.best.ret) : 'c-muted')}
+    ${kpi('Peor Mes', Mo.worst ? fmtPct(Mo.worst.ret, 1) : '—', Mo.worst ? fmtMonth(Mo.worst.mi) : 'Sin meses cerrados', Mo.worst ? signCls(Mo.worst.ret) : 'c-muted')}
+  </div></div>
+  <div class="kgroup"><div class="kgroup-l">Sistema</div><div class="kpis">
+    ${kpi('Win Rate', fmtPct(T.wr, 1, false), `${T.wins} TP · ${T.losses} SL${T.be ? ` · ${T.be} BE` : ''}${beTxt ? ` · <span class="nw">${beTxt}</span>` : ''}`, edgeCls(T.expR))}
+    ${kpi('Profit Factor', fmtPF(T.pf), 'Beneficio bruto / pérdida bruta', edgeCls(T.expR))}
+    ${kpi('Esperanza por Operación', fmtEur(T.expEur, true), T.expR == null ? 'Sin operaciones cerradas' : `${fmtR(T.expR)} de media por operación`, signCls(T.expR))}
+    ${kpi('Operaciones / Semana', fmtNum(T.opsWeek, 1), `${T.totalTrades} ${plural(T.totalTrades, 'operación', 'operaciones')} en ${M.ageDays} ${plural(M.ageDays, 'día', 'días')}`, 'c-text')}
+  </div></div>
+  <div class="kgroup"><div class="kgroup-l">Riesgo</div><div class="kpis">
+    ${kpi('Max Drawdown', R.maxDD > EPS ? fmtPct(-R.maxDD, 2) : '0,00%', R.maxDD > EPS ? `${fmtEur(R.ddPeak)} → ${fmtEur(R.ddTrough)}` : 'Sin drawdown', R.maxDD > EPS ? 'c-bad' : 'c-muted')}
+    ${kpi('Sharpe (Anual.)', Mo.sharpe == null ? '—' : fmtNum(Mo.sharpe, 2), sharpeSub, Mo.sharpe == null ? 'c-muted' : 'c-text', Mo.sharpe != null && shortS ? 'c-warn' : '')}
+    ${kpi('Sortino (Anual.)', Mo.sortino == null ? '—' : fmtNum(Mo.sortino, 2), sortinoSub, Mo.sortino == null ? 'c-muted' : 'c-text', Mo.sortino != null && shortS ? 'c-warn' : '')}
+    ${kpi('Calmar Ratio', A.calmar == null ? '—' : fmtNum(A.calmar, 2), calmarSub, A.calmar == null ? 'c-muted' : 'c-text')}
+  </div></div>`;
+}
+
+function renderEquity(M) {
+  const T = M.totals, A = M.annual;
+  const cells = [
+    ['Capital Inicial', fmtEur(CFG.CAPITAL), 'c-text'],
+    ['Capital Actual', fmtEur(T.finalEq), signCls(T.net)],
+    ['Beneficio Neto', fmtEur(T.net, true), signCls(T.net)],
+    ['Rendimiento', fmtPct(T.netPct, 1), signCls(T.net)],
+    ['Rent. Anualizada', A.cagr == null ? '—' : fmtPct(A.cagr, 1), A.cagr == null ? 'c-muted' : signCls(A.cagr)],
+    ['Edad de la Cuenta', `${M.ageDays} ${plural(M.ageDays, 'día', 'días')}`, 'c-text'],
+    ['Operaciones', `${T.N} ${plural(T.N, 'cerrada', 'cerradas')}`, 'c-text']
+  ].map(([l, v, c]) => `<div class="cell"><div class="cell-l">${l}</div><div class="cell-v ${c}">${v}</div></div>`).join('');
+  const annualNote = A.cagr == null
+    ? ` La rentabilidad anualizada aparecerá al cumplir 12 meses (faltan ${A.daysLeft} días): las rentabilidades de periodos inferiores a un año no se anualizan (norma GIPS).`
+    : ' Rentabilidad anualizada geométrica (CAGR) desde la primera operación.';
+  return `${sec('01', 'Evolución sobre 100.000 €')}
+  <div class="panel">${panelHead('Evolución del Capital', `Riesgo fijo ${fmtEur(RISK_EUR)} por operación`)}
+    <div class="strip">${cells}</div>
+    ${M.trades.length ? `<div class="chart-pad"><div class="chart" style="height:300px"><canvas id="eqChart" role="img" aria-label="Evolución del capital en euros"></canvas></div></div>` : '<div class="empty">Aún no hay operaciones cerradas.</div>'}
+    <div class="note">Cada operación arriesga siempre ${fmtPct(CFG.RISK_PCT / 100, 1, false)} de los ${fmtEur(CFG.CAPITAL)} iniciales (${fmtEur(RISK_EUR)} = 1R), sin interés compuesto. Beneficio de cada operación = RR final × ${fmtEur(RISK_EUR)}.${annualNote}</div>
+  </div>`;
+}
+
+function renderMonthly(M) {
+  if (!M.months.length) return '';
+  const maxAbs = Math.max(EPS, ...M.months.map(m => Math.abs(m.ret)));
+  const head = y => `<tr class="yr"><th>${y.year}</th>${MES_T.map((t, i) => {
+    const m = M.months.find(o => o.year === y.year && o.month === i);
+    return `<th class="${m && m.inprog ? 'cur' : ''}">${t}</th>`;
+  }).join('')}<th class="tot">Año</th></tr>`;
+  const rowsFor = y => {
+    const cellsFor = fn => MES_T.map((_, i) => {
+      const m = M.months.find(o => o.year === y.year && o.month === i);
+      return m ? fn(m) : '<td></td>';
+    }).join('');
+    const ret = cellsFor(m => {
+      const a = m.n ? (0.07 + 0.2 * Math.min(1, Math.abs(m.ret) / maxAbs)).toFixed(3) : 0;
+      const bg = m.ret > EPS ? `rgba(var(--good-rgb),${a})` : m.ret < -EPS ? `rgba(var(--bad-rgb),${a})` : 'transparent';
+      return `<td class="ret ${signCls(m.ret)}" style="background:${bg}" title="${fmtMonth(m.mi)}: ${fmtEur(m.pnl, true)} sobre ${fmtEur(m.estart)}">${fmtPct(m.ret, 1)}</td>`;
+    });
+    const pnl = cellsFor(m => `<td class="${signCls(m.pnl)}">${fmtSigned(m.pnl, 0)}</td>`);
+    const wr = cellsFor(m => m.n ? `<td class="${edgeCls(m.expR)}">${fmtPct(m.w / m.n, 0, false)}</td>` : '<td class="c-muted">—</td>');
+    const ops = cellsFor(m => `<td class="${m.n ? 'c-text' : 'c-muted'}">${m.n}</td>`);
+    return `
+      <tr><td>Rentabilidad</td>${ret}<td class="tot ${signCls(y.ret)}">${fmtPct(y.ret, 1)}</td></tr>
+      <tr><td>Beneficio (€)</td>${pnl}<td class="tot ${signCls(y.pnl)}">${fmtSigned(y.pnl, 0)}</td></tr>
+      <tr><td>Win Rate</td>${wr}<td class="tot ${edgeCls(y.expR)}">${y.n ? fmtPct(y.w / y.n, 0, false) : '—'}</td></tr>
+      <tr><td>Operaciones</td>${ops}<td class="tot">${y.n}</td></tr>`;
+  };
+  const body = M.years.map(y => `<thead>${head(y)}</thead><tbody>${rowsFor(y)}</tbody>`).join('');
+  return `${sec('02', 'Consistencia Mensual')}
+  <div class="panel">${panelHead('Rentabilidad Mensual', '<span class="dot-cur"></span>Mes en curso')}
+    <div class="scroll"><table class="tbl mt">${body}</table></div>
+    <div class="note" style="padding-top:12px">Rentabilidad de cada mes = beneficio del mes / capital al inicio del mes (TWR). La columna Año compone los meses; el beneficio en € sí se suma. Las operaciones se asignan al mes de su fecha de entrada.</div>
+  </div>`;
+}
+
+function renderPairs(M) {
+  if (!M.pairs.length) return '';
+  const hasBE = M.pairs.some(p => p.b);
+  const rows = M.pairs.map(p => `<tr>
+      <td class="strong">${esc(p.par)}</td><td>${p.n}</td><td>${p.w}</td><td>${p.l}</td>${hasBE ? `<td>${p.b}</td>` : ''}
+      <td class="strong ${edgeCls(p.expR)}">${fmtPct(p.wr, 0, false)}</td>
+      <td class="${signCls(p.pnl)}">${fmtEur(p.pnl, true)}</td>
+      <td class="${edgeCls(p.expR)}">${fmtPF(p.pf)}</td></tr>`).join('');
+  const small = M.pairs.filter(p => p.n < 10).length;
+  return `${sec('03', 'Calidad del Sistema')}
+  <div class="panel">${panelHead('Rendimiento por Par', 'Ordenado por win rate')}
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th>Par</th><th>Ops</th><th>TP</th><th>SL</th>${hasBE ? '<th>BE</th>' : ''}<th>Win Rate</th><th>Beneficio</th><th>Profit Factor</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${small ? `<div class="note" style="padding-top:12px">${small} de ${M.pairs.length} pares tienen menos de 10 operaciones: con muestras tan pequeñas el win rate de cada par es sobre todo ruido estadístico, no una ventaja confirmada.</div>` : ''}
+  </div>`;
+}
+
+function renderRisk(M) {
+  const R = M.risk, T = M.totals;
+  const kv = (l, sub, v, vsub, cls) => `<div class="kv"><span class="kv-l">${l}${sub ? `<small>${sub}</small>` : ''}</span><span class="kv-v ${cls || ''}">${v}${vsub ? `<small>${vsub}</small>` : ''}</span></div>`;
+  const tr = M.trades;
+  const dayAt = i => i < 0 ? 'el inicio' : fmtDate(tr[i].day);
+  const ddRange = R.maxDD > EPS ? `${fmtEur(R.ddPeak)} → ${fmtEur(R.ddTrough)} · del ${dayAt(R.ddPeakIdx)} al ${dayAt(R.ddTroughIdx)}` : 'Sin caídas desde máximos';
+  const mc = M.mc;
+  const ddLim = fmtPct(CFG.DD_LIMIT, 0, false);
+  const mcRows = mc
+    ? kv(`Probabilidad de DD ≥ ${ddLim}`, `Próximas ${mc.H} operaciones (≈ 12 meses al ritmo actual) · Monte Carlo`, fmtPct(mc.prob, 1, false), '', mc.prob >= 0.2 ? 'c-bad' : mc.prob >= 0.05 ? 'c-warn' : 'c-good')
+      + kv('Drawdown en escenario adverso', `Percentil 95: solo 1 de cada 20 simulaciones lo supera · próximas ${mc.H} ops`, fmtPct(-mc.p95, 1), `mediana ${fmtPct(-mc.p50, 1)}`, 'c-bad')
+    : kv(`Probabilidad de DD ≥ ${ddLim}`, 'Monte Carlo: necesita al menos 10 operaciones cerradas', '—', '', 'c-muted')
+      + kv('Drawdown en escenario adverso', 'Monte Carlo: necesita al menos 10 operaciones cerradas', '—', '', 'c-muted');
+  const seq = tr.map(t => `<div class="sq ${t.out}" title="N·${esc(t.nraw)} · ${fmtDate(t.day)} · ${esc(t.par)} · ${fmtR(t.R, 1)}">${outLabel(t.out)}</div>`).join('');
+  return `${sec('04', 'Gestión del Riesgo')}
+  ${tr.length ? `<div class="panel">${panelHead('Drawdown', 'Caída desde el máximo previo de capital')}
+    <div class="chart-pad"><div class="chart" style="height:190px"><canvas id="ddChart" role="img" aria-label="Drawdown desde máximos"></canvas></div></div>
+  </div>` : ''}
+  <div class="panel">${panelHead('Métricas de Riesgo', 'Medidas al cierre de cada operación')}
+    <div class="kvs two">
+      ${kv('Max Drawdown', ddRange, R.maxDD > EPS ? fmtPct(-R.maxDD, 2) : '0,00%', R.maxDD > EPS ? fmtEur(-(R.ddPeak - R.ddTrough)) : '', R.maxDD > EPS ? 'c-bad' : 'c-muted')}
+      ${kv('Drawdown actual', 'Distancia al máximo de capital', R.curDD > EPS ? fmtPct(-R.curDD, 2) : '0,00%', R.curDD > EPS ? fmtEur(-(R.peak - T.finalEq)) : 'En máximos', R.curDD > EPS ? 'c-bad' : 'c-good')}
+      ${kv('Tiempo bajo máximos', 'Operaciones cerradas por debajo del máximo previo', fmtPct(R.timeInDD, 0, false), '', 'c-text')}
+      ${kv('Periodo más largo bajo máximos', 'Operaciones seguidas por debajo del máximo previo', `${R.longestDD} ${plural(R.longestDD, 'op', 'ops')}`, '', 'c-text')}
+      ${kv('Racha máx. ganadora', 'Operaciones ganadoras seguidas', `${R.maxWin} TP`, '', R.maxWin ? 'c-good' : 'c-muted')}
+      ${kv('Racha máx. perdedora', R.maxLossEur < -EPS ? `Mayor pérdida acumulada en una racha: ${fmtEur(R.maxLossEur, true)}` : 'Operaciones perdedoras seguidas', `${R.maxLoss} SL`, '', R.maxLoss ? 'c-bad' : 'c-muted')}
+      ${mcRows}
+    </div>
+  </div>
+  <div class="panel">${panelHead('Secuencia de Resultados', 'Orden cronológico')}
+    ${seq ? `<div class="seq">${seq}</div>` : '<div class="empty">Sin operaciones cerradas.</div>'}
+  </div>`;
+}
+
+function renderEfficiency(M) {
+  const T = M.totals;
+  const days = M.weekdays.map(d => {
+    const rgb = d.expR >= CFG.EDGE_GOOD_R - EPS ? 'var(--good-rgb)' : d.expR >= -EPS ? 'var(--warn-rgb)' : 'var(--bad-rgb)';
+    return `<div class="hrow">
+      <span class="hday">${DAY_NAMES[d.d]}</span>
+      <div class="htrack"><div class="hfill" style="width:${(d.wr * 100).toFixed(1)}%;background:rgba(${rgb},.30)"></div>
+        <span class="hlbl">${d.w} TP&nbsp;&nbsp;${d.l} SL${d.b ? `&nbsp;&nbsp;${d.b} BE` : ''}&nbsp;&nbsp;${d.n} ${plural(d.n, 'op', 'ops')}</span></div>
+      <span class="hwr ${edgeCls(d.expR)}">${fmtPct(d.wr, 0, false)}</span>
+      <span class="hpnl ${signCls(d.pnl)}">${fmtEur(d.pnl, true)}</span>
+    </div>`;
+  }).join('');
+  const D = M.dur;
+  const cellOf = (s, k) => s.tot ? `${s[k]} <span class="c-muted">(${fmtPct(s[k] / s.tot, 0, false)})</span>` : '—';
+  const drow = (label, k) => `<tr><td>${label}</td><td>${cellOf(D.w, k)}</td><td>${cellOf(D.l, k)}</td></tr>`;
+  const meanOf = s => s.mean == null ? '—' : `${fmtNum(s.mean, 1)} ${s.mean === 1 ? 'día' : 'días'}`;
+  // Comparación robusta: % cerrado en ≤ 1 día (un cierre "semana siguiente" siempre supera ese plazo)
+  let insight = '';
+  if (D.w.le1 != null && D.l.le1 != null) {
+    insight = `<div class="insight">En 1 día o menos se cerró el <b>${fmtPct(D.l.le1, 0, false)}</b> de los SL y el <b>${fmtPct(D.w.le1, 0, false)}</b> de los TP. `
+      + `${D.w.amb2 ? 'Al menos ' : ''}<b>${D.w.n2} de ${D.w.tot}</b> TP se cerraron en 2 días o menos.</div>`;
+  }
+  const unknownN = D.w.unknown + D.l.unknown;
+  return `${sec('05', 'Eficiencia Operativa')}
+  <div class="panel">${panelHead('Frecuencia de Operaciones', `Media: ${fmtNum(T.opsWeek, 1)} por semana`)}
+    <div class="chart-pad"><div class="chart" style="height:200px"><canvas id="freqChart" role="img" aria-label="Operaciones por semana"></canvas></div></div>
+    <div class="legend">
+      <span><i class="k-box" style="background:var(--bar)"></i>Entradas por semana</span>
+      <span><i class="k-line" style="background:var(--accent)"></i>Media móvil 4 semanas</span>
+      <span><i class="k-dash" style="border-color:var(--text2)"></i>Media de todo el periodo</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="panel">${panelHead('Mapa de Calor — Día de Entrada', 'Win rate y beneficio')}
+      <div class="panel-b">${days || '<div class="empty">Sin datos.</div>'}</div>
+    </div>
+    <div class="panel">${panelHead('Duración por Resultado', 'De la entrada al cierre')}
+      <div class="scroll"><table class="tbl">
+        <thead><tr><th>Cierre</th><th>Take Profit</th><th>Stop Loss</th></tr></thead>
+        <tbody>${drow('Mismo día', 'd0')}${drow('Al día siguiente', 'd1')}${drow('2 o más días', 'd2p')}${drow('Semana siguiente', 'next')}
+          <tr><td class="strong">Media (misma semana)</td><td class="strong">${meanOf(D.w)}</td><td class="strong">${meanOf(D.l)}</td></tr></tbody></table></div>
+      ${insight}
+      <div class="note">Días naturales entre el día de entrada y el de salida. La media solo usa cierres dentro de la misma semana: los de "Semana siguiente" no registran el día exacto y se cuentan aparte.${unknownN ? ` ${unknownN} ${plural(unknownN, 'operación', 'operaciones')} sin día de salida válido.` : ''}</div>
+    </div>
+  </div>`;
+}
+
+function renderCurrent(M) {
+  const T = M.totals;
+  const last = M.rolling.length ? M.rolling[M.rolling.length - 1] : null;
+  const lastExp = last == null ? null : mean(M.trades.slice(-CFG.ROLL_WIN).map(t => t.R));
+  const openRows = M.open.slice().reverse().map(t => `<tr><td class="strong">N·${esc(t.nraw)}</td><td class="l">${esc(t.par)}</td><td class="l">${esc(t.dir) || '—'}</td><td class="l">${fmtDate(t.day)}</td><td>${t.day == null ? '—' : `${M.today - t.day} ${plural(M.today - t.day, 'día', 'días')}`}</td><td class="l">${esc(t.tipo) || '—'}</td></tr>`).join('');
+  return `${sec('06', 'Estado Actual')}
+  <div class="panel">${panelHead('Win Rate Móvil', `Ventana de ${CFG.ROLL_WIN} operaciones`)}
+    ${last == null ? `<div class="empty">Necesita al menos ${CFG.ROLL_WIN} operaciones cerradas.</div>` : `
+    <div class="chart-pad"><div class="chart" style="height:200px"><canvas id="rollChart" role="img" aria-label="Win rate móvil"></canvas></div></div>
+    <div class="legend">
+      <span><i class="k-line" style="background:var(--accent)"></i>Últimas ${CFG.ROLL_WIN}:&nbsp;<b class="${edgeCls(lastExp)}">${fmtPct(last, 0, false)}</b>&nbsp;<span class="c-muted">(${fmtR(lastExp)} por operación)</span></span>
+      <span><i class="k-dash" style="border-color:var(--text2)"></i>Global: ${fmtPct(T.wr, 1, false)}</span>
+      ${T.beWr != null ? `<span><i class="k-dash" style="border-color:var(--bad)"></i>Break-even: ${fmtPct(T.beWr, 0, false)}</span>` : ''}
+    </div>
+    ${T.beWr != null ? `<div class="note">Break-even: win rate mínimo para no perder dinero con tu ganancia y pérdida medias actuales (${fmtR(T.avgWinR)} / ${fmtR(-T.avgLossR)}). Mantenerse por debajo de esa línea con el mismo ratio significa perder dinero.</div>` : ''}`}
+  </div>
+  <div class="panel">${panelHead('Operaciones Abiertas', `${M.open.length} ${plural(M.open.length, 'abierta', 'abiertas')}`)}
+    ${M.open.length ? `<div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Par</th><th class="l">Dirección</th><th class="l">Entrada</th><th>Abierta</th><th class="l">Tipo</th></tr></thead><tbody>${openRows}</tbody></table></div>` : '<div class="empty">Sin operaciones abiertas.</div>'}
+  </div>`;
+}
+
+function renderLog(M) {
+  if (!M.trades.length) return '';
+  const rows = M.trades.slice().reverse().map(t => `<tr><td class="strong">N·${esc(t.nraw)}</td><td class="l">${fmtDate(t.day)}</td><td class="l">${esc(t.par)}</td>
+    <td class="l strong ${t.out === 'w' ? 'c-good' : t.out === 'l' ? 'c-bad' : 'c-warn'}">${outLabel(t.out)}</td><td>${fmtR(t.R, 1)}</td><td class="${signCls(t.pnl)}">${fmtEur(t.pnl, true)}</td><td>${fmtEur(t.eq)}</td>
+    <td class="l">${esc(t.dir) || '—'}</td><td class="l">${esc(t.tipo) || '—'}</td></tr>`).join('');
+  return `${sec('07', 'Registro de Operaciones')}
+  <details class="panel"><summary><span class="panel-t">Ver las ${M.trades.length} operaciones cerradas</span>${ICON_CHEV}</summary>
+    <div class="scroll"><table class="tbl"><thead><tr><th>N·</th><th class="l">Fecha</th><th class="l">Par</th><th class="l">Resultado</th><th>R</th><th>Beneficio</th><th>Capital</th><th class="l">Dirección</th><th class="l">Tipo</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </details>`;
+}
+
+function renderMethod(M) {
+  const I = M.issues;
+  const byN = (a, b) => { const x = parseNum(a), y = parseNum(b); return (Number.isNaN(x) || Number.isNaN(y)) ? String(a).localeCompare(String(b)) : x - y; };
+  const list = arr => { const s = arr.slice().sort(byN); return s.slice(0, 12).map(n => 'N·' + esc(n)).join(', ') + (s.length > 12 ? '…' : ''); };
+  const ops = n => `${n} ${plural(n, 'operación', 'operaciones')}`;
+  const riskTxt = fmtPct(CFG.RISK_PCT / 100, 1, false);
+  const items = [];
+  const dup = M.rawCount - M.uniqueCount;
+  if (dup > 0) items.push(`${dup} ${plural(dup, 'fila repetida', 'filas repetidas')} en la fuente (ediciones sucesivas de la misma operación): se usa la última versión de cada N·.`);
+  if (I.dayMismatch.length) items.push(`${ops(I.dayMismatch.length)} con "Día Entrada" distinto del día de la semana de su fecha (${list(I.dayMismatch)}). El mapa de calor usa "Día Entrada"; meses y semanas usan la fecha. Conviene revisarlas en Notion.`);
+  if (I.assumed.length) items.push(`${ops(I.assumed.length)} con resultado pero sin RR final (${list(I.assumed)}): se ha asumido ±1R.`);
+  if (I.inconsistent.length) items.push(`${ops(I.inconsistent.length)} con un RR final que contradice el resultado (${list(I.inconsistent)}): se usa el RR final.`);
+  if (I.riskDiff.length) items.push(`${ops(I.riskDiff.length)} con un riesgo anotado distinto de ${riskTxt} (${list(I.riskDiff)}): el dashboard calcula todas con ${riskTxt}.`);
+  if (I.noDate.length) items.push(`${ops(I.noDate.length)} sin fecha válida (${list(I.noDate)}): cuentan en los totales, pero no en meses ni semanas.`);
+  if (I.otherRes.length) items.push(`${ops(I.otherRes.length)} con un resultado no reconocido y sin RR (${list(I.otherRes)}): ${plural(I.otherRes.length, 'excluida', 'excluidas')} de los cálculos.`);
+  return `${sec('08', 'Metodología')}
+  <details class="panel"><summary><span class="panel-t">Cómo se calcula cada métrica${items.length ? ` · ${items.length} ${plural(items.length, 'aviso', 'avisos')} de datos` : ''}</span>${ICON_CHEV}</summary>
+    <div class="method">
+      <dl>
+        <dt>Riesgo y beneficio</dt><dd>Riesgo fijo de ${fmtEur(RISK_EUR)} por operación (1R = ${fmtPct(CFG.RISK_PCT / 100, 1, false)} de ${fmtEur(CFG.CAPITAL)}), sin interés compuesto. Beneficio = RR final × ${fmtEur(RISK_EUR)}.</dd>
+        <dt>Win Rate y break-even</dt><dd>Ganadoras / operaciones cerradas (los BE cuentan en el total). Break-even = pérdida media / (ganancia media + pérdida media), en R, ajustado por la proporción de BE: el win rate mínimo para no perder dinero con el ratio real del sistema.</dd>
+        <dt>Profit Factor y Esperanza</dt><dd>Beneficio bruto / pérdida bruta. Esperanza = beneficio medio por operación (en € y en R).</dd>
+        <dt>Drawdown</dt><dd>Mayor caída del capital desde un máximo previo hasta el mínimo posterior, medida al cierre de cada operación (no incluye pérdidas flotantes).</dd>
+        <dt>Rentabilidad mensual</dt><dd>Beneficio del mes / capital al inicio del mes (TWR). Se incluyen los meses sin operar (0%). Las estadísticas mensuales usan solo meses cerrados.</dd>
+        <dt>Sharpe y Sortino</dt><dd>Sharpe = media mensual / desviación típica muestral × √12 (tipo libre de riesgo 0%). Sortino = media mensual / desviación a la baja × √12, con la desviación a la baja calculada sobre todos los meses (objetivo 0%). Se marcan como muestra corta hasta tener 12 meses cerrados.</dd>
+        <dt>Rentabilidad anualizada y Calmar</dt><dd>Solo con 12 meses o más de historial: las rentabilidades de periodos inferiores a un año no se anualizan (norma GIPS). CAGR = (capital final / inicial)<sup>365,25 / días</sup> − 1. Calmar = CAGR / Max Drawdown.</dd>
+        <dt>Monte Carlo</dt><dd>${fmtNum(CFG.MC_PATHS, 0)} simulaciones de las próximas operaciones (≈ 12 meses al ritmo actual) remuestreando tus propios resultados con pesos aleatorios (bootstrap bayesiano), lo que incorpora la incertidumbre del win rate por tener una muestra pequeña. El drawdown se mide desde el máximo de capital (incluido el drawdown actual, si lo hay). Supone operaciones independientes y el mismo riesgo fijo; es una estimación, no una garantía.</dd>
+        <dt>Colores</dt><dd>Verde: esperanza ≥ +${fmtNum(CFG.EDGE_GOOD_R, 1)}R por operación. Ámbar: entre 0 y +${fmtNum(CFG.EDGE_GOOD_R, 1)}R. Rojo: negativa. En un sistema 1:1 equivale a win rate ≥ 60%, 50–60% y &lt; 50%.</dd>
+        <dt>Asignación temporal</dt><dd>Las operaciones se ordenan y se asignan a meses y semanas por su fecha de entrada. La semana operativa empieza el domingo con la apertura del mercado.</dd>
+      </dl>
+      <h4>Control de datos</h4>
+      ${items.length ? `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '<p>Sin incidencias en los datos.</p>'}
+    </div>
+  </details>`;
+}
+
+function renderAll(M) {
+  destroyCharts();
+  secCount = 0;
+  const T = M.totals;
+  $('topSub').textContent = `${T.N} ${plural(T.N, 'operación cerrada', 'operaciones cerradas')} · ${M.open.length} ${plural(M.open.length, 'abierta', 'abiertas')} · Actualizado ${loadedAt ? loadedAt.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}`;
+  $('content').innerHTML = `<div id="banner"></div>`
+    + renderKpis(M) + renderEquity(M) + renderMonthly(M) + renderPairs(M) + renderRisk(M)
+    + renderEfficiency(M) + renderCurrent(M) + renderLog(M) + renderMethod(M)
+    + `<footer class="footer"><span>Riesgo fijo ${fmtEur(RISK_EUR)} por operación sobre ${fmtEur(CFG.CAPITAL)} · Datos de operaciones cerradas</span><span>Datos a ${fmtDate(M.today)}</span></footer>`;
+  requestAnimationFrame(() => drawCharts(M));
+}
+
+/* ── Gráficos ── */
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function theme() {
+  const t = {};
+  ['--panel', '--border', '--border2', '--grid', '--text', '--text2', '--muted', '--accent', '--good', '--bad', '--warn', '--bar', '--accent-rgb', '--bad-rgb', '--good-rgb'].forEach(k => t[k.slice(2).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = cssVar(k));
+  return t;
+}
+function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) { /* ya destruido */ } }); charts = []; }
+
+const pluginXMarkers = {
+  id: 'xMarkers',
+  beforeDatasetsDraw(chart, _a, o) {
+    if (!o || !o.at || !o.at.length) return;
+    const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+    ctx.save(); ctx.strokeStyle = o.color; ctx.lineWidth = 1;
+    o.at.forEach(i => { const px = Math.round((x.getPixelForValue(i - 1) + x.getPixelForValue(i)) / 2) + 0.5; ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke(); });
+    ctx.restore();
+  }
+};
+const pluginHLines = {
+  id: 'hLines',
+  beforeDatasetsDraw(chart, _a, o) {
+    if (!o || !o.lines || !o.lines.length) return;
+    const { ctx, chartArea: { left, right, top, bottom }, scales: { y } } = chart;
+    ctx.save();
+    o.lines.forEach(l => {
+      const py = Math.round(y.getPixelForValue(l.y)) + 0.5;
+      if (py < top - 1 || py > bottom + 1) return;
+      ctx.strokeStyle = l.color; ctx.lineWidth = l.width || 1.25; ctx.setLineDash(l.dash || []);
+      ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(right, py); ctx.stroke();
+    });
+    ctx.restore();
+  }
+};
+const pluginCrosshair = {
+  id: 'crosshair',
+  afterDatasetsDraw(chart, _a, o) {
+    if (!o || !o.color) return;
+    const act = chart.tooltip && chart.tooltip.getActiveElements ? chart.tooltip.getActiveElements() : [];
+    if (!act.length) return;
+    const { ctx, chartArea: { top, bottom } } = chart;
+    const px = Math.round(act[0].element.x) + 0.5;
+    ctx.save(); ctx.strokeStyle = o.color; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke(); ctx.restore();
+  }
+};
+if (window.Chart) Chart.register(pluginXMarkers, pluginHLines, pluginCrosshair);
+
+// Etiquetas del eje X: el mes en la primera operación de cada mes, sin solaparse
+function monthTicks(dayList, offset, canvas) {
+  const labels = new Array(dayList.length + offset).fill('');
+  const breaks = [];
+  const w = (canvas && canvas.parentElement && canvas.parentElement.clientWidth) || 800;
+  const total = dayList.length + offset;
+  const minGap = Math.max(1, Math.ceil(34 / Math.max(1, w / Math.max(1, total))));
+  let prevMonth = null, lastLabeled = -1e9;
+  dayList.forEach((d, i) => {
+    if (d == null) return;
+    const mi = monthIdx(d);
+    if (mi !== prevMonth) {
+      const idx = i + offset;
+      if (prevMonth != null) breaks.push(idx);
+      if (idx - lastLabeled >= minGap) { labels[idx] = MES[mi % 12]; lastLabeled = idx; }
+      prevMonth = mi;
     }
   });
-  if (currentRawData) renderDash(compute(filterData(currentRawData, filter)));
+  return { labels, breaks };
 }
 
-function compute(rows) {
-  const allRows = rows.map(r => { const n = {}; Object.keys(r).forEach(k => { n[k.trim()] = r[k]; }); return n; }).filter(r => r['N·'] || r['N']);
-  // Deduplicar por N· — la última fila (más abajo en el Sheet) es la más actualizada
-  const seen = new Map();
-  allRows.forEach(r => { const key = String(r['N·'] || r['N']).trim(); seen.set(key, r); });
-  // Ordenar por N· numérico para garantizar orden consistente
-  const data = Array.from(seen.values()).sort((a, b) => {
-    const na = parseFloat(a['N·'] || a['N']) || 0;
-    const nb = parseFloat(b['N·'] || b['N']) || 0;
-    return na - nb;
-  });
-
-  // Normalización: la operación del 30/03 se trata como 01/04 para
-  // evitar que marzo aparezca como mes independiente con 1 sola entrada
-
-  const closed = data.filter(r => r.Resultado === 'Take Profit' || r.Resultado === 'Stop Loss');
-  const isTP = r => r.Resultado === 'Take Profit';
-  const isSL = r => r.Resultado === 'Stop Loss';
-  const rr = r => { const v = parseFloat(r['RR Final']); return isNaN(v) ? 0 : v; };
-  const risk = r => { const v = parseFloat(String(r.Riesgo || '1.5').replace('%', '')); return isNaN(v) ? 1.5 : v; };
-  const pnl = r => rr(r) * risk(r);
-  const sorted = [...closed].sort((a, b) => {
-    const da = (parseDate(a.Fecha) || 0), db = (parseDate(b.Fecha) || 0);
-    if (da - db !== 0) return da - db;
-    return (parseFloat(a['N·']||a['N'])||0) - (parseFloat(b['N·']||b['N'])||0);
-  });
-
-  const tp = closed.filter(isTP).length, sl = closed.filter(isSL).length;
-  const wr = closed.length ? tp / closed.length * 100 : 0;
-  const grossW = closed.filter(r => pnl(r) > 0).reduce((s, r) => s + pnl(r), 0);
-  const grossL = Math.abs(closed.filter(r => pnl(r) < 0).reduce((s, r) => s + pnl(r), 0));
-  const pf = grossL > 0 ? grossW / grossL : grossW > 0 ? Infinity : 0;
-  const netPnl = closed.reduce((s, r) => s + pnl(r), 0);
-
-  let eq = 100, peak = 100, maxDD = 0, maxDDPeak = 100, maxDDValley = 100;
-  let euroAcc = 100000; // €100k simulation
-  const equity = sorted.map(r => {
-    eq += pnl(r); if (eq > peak) peak = eq;
-    const dd = (peak - eq) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDPeak = peak; maxDDValley = eq; }
-    euroAcc = +(euroAcc + (pnl(r) / 100 * 100000)).toFixed(2);
-    return { n: `N·${r['N·'] || r['N']}`, eq: +eq.toFixed(2), dd: +dd.toFixed(2), op: r.Operador, res: rr(r) > 0 ? 'TP' : rr(r) < 0 ? 'SL' : 'BE', pnlV: +pnl(r).toFixed(2), euroVal: euroAcc };
-  });
-
-  // Sharpe y Sortino sobre retornos MENSUALES anualizados (×√12)
-  // Más correcto que por operación individual
-  const monthlyPnlMap = {};
-  closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
-    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    monthlyPnlMap[k] = (monthlyPnlMap[k] || 0) + pnl(r);
-  });
-  const monthlyReturns = Object.values(monthlyPnlMap);
-  const nM = monthlyReturns.length || 1;
-  const meanR = monthlyReturns.reduce((a,b) => a+b, 0) / nM;
-  const stdR = Math.sqrt(monthlyReturns.reduce((s,r) => s+(r-meanR)**2, 0) / nM) || 1;
-  const negR = monthlyReturns.filter(r => r < 0);
-  const downStd = negR.length ? Math.sqrt(negR.reduce((s,r) => s+r**2, 0) / negR.length) : stdR;
-  // Anualizados ×√12
-  const sharpeRaw = (meanR / stdR) * Math.sqrt(12);
-  const sortinoRaw = (meanR / downStd) * Math.sqrt(12);
-
-  let cw = 0, cl = 0, maxW = 0, maxL = 0;
-  sorted.forEach(r => { if (rr(r) > 0) { cw++; cl = 0; } else if (rr(r) < 0) { cl++; cw = 0; } else { cw = 0; cl = 0; } maxW = Math.max(maxW, cw); maxL = Math.max(maxL, cl); });
-
-  const allOps = [...new Set(data.map(r => r.Operador).filter(Boolean))];
-  const ops = {};
-  allOps.forEach(op => {
-    const sub = closed.filter(r => r.Operador === op);
-    const tp2 = sub.filter(isTP).length, sl2 = sub.filter(isSL).length;
-    const gw = sub.filter(r => pnl(r) > 0).reduce((s, r) => s + pnl(r), 0);
-    const gl = Math.abs(sub.filter(r => pnl(r) < 0).reduce((s, r) => s + pnl(r), 0));
-    ops[op] = { ops: sub.length, tp: tp2, sl: sl2, wr: sub.length ? tp2 / sub.length * 100 : 0, pf: gl > 0 ? gw / gl : gw > 0 ? Infinity : 0, netPnl: sub.reduce((s, r) => s + pnl(r), 0) };
-  });
-
-  const tipos = {};
-  closed.forEach(r => {
-    const t = r.Tipo || 'Sin tipo';
-    if (!tipos[t]) tipos[t] = { tp: 0, sl: 0, ops: 0, grossW: 0, grossL: 0, netPnl: 0 };
-    tipos[t].ops++; if (isTP(r)) { tipos[t].tp++; if (pnl(r) > 0) tipos[t].grossW += pnl(r); }
-    if (isSL(r)) { tipos[t].sl++; tipos[t].grossL += Math.abs(pnl(r)); } tipos[t].netPnl += pnl(r);
-  });
-
-  const monthly = {};
-  closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const lbl = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
-    if (!monthly[k]) monthly[k] = { key: k, label: lbl, ops: {} };
-    const op = r.Operador || '?';
-    if (!monthly[k].ops[op]) monthly[k].ops[op] = { tp: 0, sl: 0, pnl: 0 };
-    if (isTP(r)) monthly[k].ops[op].tp++; if (isSL(r)) monthly[k].ops[op].sl++;
-    monthly[k].ops[op].pnl += pnl(r);
-  });
-
-  const days = {};
-  closed.forEach(r => {
-    const d = (r['Día Entrada'] || r['Dia Entrada'] || '').trim(); if (!d) return;
-    if (!days[d]) days[d] = { dia: d, ops: 0, tp: 0, sl: 0, pnl: 0 };
-    days[d].ops++; if (isTP(r)) days[d].tp++; if (isSL(r)) days[d].sl++; days[d].pnl += pnl(r);
-  });
-
-  const dayNum = { 'Domingo': -1, 'Lunes': 0, 'Martes': 1, 'Miercoles': 2, 'Jueves': 3, 'Viernes': 4, 'Semana Siguiente': 7 };
-  const withDur = closed.map(r => {
-    const e = dayNum[(r['Día Entrada'] || r['Dia Entrada'] || '').trim()];
-    const s = dayNum[(r['Día Salida'] || r['Dia Salida'] || '').trim()];
-    if (e === undefined || s === undefined) return { ...r, dur: null };
-    let diff = s - e; if (diff < 0) diff += 7; return { ...r, dur: diff };
-  });
-  const tpDur = withDur.filter(r => isTP(r) && r.dur !== null).map(r => r.dur);
-  const slDur = withDur.filter(r => isSL(r) && r.dur !== null).map(r => r.dur);
-  const avgDur = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  const open = data.filter(r => !r.Resultado || (r.Resultado !== 'Take Profit' && r.Resultado !== 'Stop Loss'));
-
-  // Equity curves per operator
-  const opEquity = {};
-  allOps.forEach(op => {
-    let opEq = 100, opPeak = 100, opMaxDD = 0;
-    const opSorted = sorted.filter(r => r.Operador === op);
-    opEquity[op] = opSorted.map(r => {
-      opEq += pnl(r); if (opEq > opPeak) opPeak = opEq;
-      const dd = (opPeak - opEq) / opPeak * 100; if (dd > opMaxDD) opMaxDD = dd;
-      return { n: `N·${r['N·']||r['N']}`, eq: +opEq.toFixed(2), res: rr(r)>0?'TP':rr(r)<0?'SL':'BE', pnlV: +pnl(r).toFixed(2) };
-    });
-  });
-
-  // Monthly PnL for bar chart
-  const monthlyBar = m => {
-    const result = {};
-    allOps.forEach(op => { result[op] = []; });
-    const allMonths = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1).map(m=>m.label);
-    allMonths.forEach(lbl => {
-      const row = Object.values(monthly).find(m=>m.label===lbl);
-      allOps.forEach(op => {
-        result[op].push(row?.ops[op]?.pnl || 0);
-      });
-    });
-    return { labels: allMonths, series: result };
+function baseOptions(t, labels, yFmt) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: 4, right: 4 } },
+    plugins: {
+      legend: { display: false },
+      crosshair: { color: t.border2 },
+      tooltip: {
+        backgroundColor: t.panel, borderColor: t.border2, borderWidth: 1, titleColor: t.text, bodyColor: t.text2,
+        titleFont: { family: 'Inter', weight: '600', size: 12 }, bodyFont: { family: 'Inter', size: 12 },
+        padding: 10, cornerRadius: 8, displayColors: false, caretSize: 5
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: t.border2 }, ticks: { color: t.muted, autoSkip: false, maxRotation: 0, font: { family: 'Inter', size: 11 }, callback: (_v, i) => labels[i] || '' } },
+      y: { grid: { color: t.grid }, border: { display: false }, ticks: { color: t.muted, font: { family: 'Inter', size: 11 }, maxTicksLimit: 6, callback: yFmt } }
+    }
   };
-  const monthlyBarData = monthlyBar();
-  
+}
 
-  // Edad de la cuenta (primer trade → hoy)
-  const allDates = data.map(r => parseDate(r.Fecha)).filter(Boolean);
-  const firstDate = allDates.length ? new Date(Math.min(...allDates)) : null;
-  const lastDate = allDates.length ? new Date(Math.max(...allDates)) : null;
-  const today = new Date();
-  const accountAgeDays = firstDate ? Math.floor((today - firstDate) / 86400000) : 0;
-  const accountAgeMonths = firstDate ? ((today.getFullYear() - firstDate.getFullYear()) * 12 + (today.getMonth() - firstDate.getMonth())) : 0;
-  const accountAgeLabel = accountAgeDays > 0 ? (accountAgeDays < 30 ? accountAgeDays+' días' : accountAgeMonths < 12 ? accountAgeMonths+' meses' : Math.floor(accountAgeMonths/12)+'a '+(accountAgeMonths%12)+'m') : '—';
+function drawCharts(M) {
+  if (!window.Chart) return;
+  const t = theme();
+  const tr = M.trades;
+  const tradeTitle = i => { const x = tr[i]; return `Operación ${i + 1} · ${fmtDate(x.day)}`; };
 
-  // Rentabilidad anualizada real (CAGR)
-  const yearsElapsed = accountAgeDays > 0 ? accountAgeDays / 365.25 : 1;
-  const cagr = yearsElapsed > 0 ? ((euroAcc - 100000) / 100000 / yearsElapsed) * 100 : 0;
-
-  // % Meses positivos
-  const monthlyPnls = Object.values(monthly).map(m => {
-    return Object.values(m.ops).reduce((s, o) => s + (o.pnl||0), 0);
-  });
-  const posMonths = monthlyPnls.filter(p => p > 0).length;
-  const pctPosMonths = monthlyPnls.length > 0 ? posMonths / monthlyPnls.length * 100 : 0;
-  const avgMonthlyPnl = monthlyPnls.length > 0 ? monthlyPnls.reduce((a,b)=>a+b,0)/monthlyPnls.length : 0;
-
-  // Mejor y peor mes
-  const monthlyLabels = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1);
-  const monthlyPnlMap2 = monthlyLabels.map(m => ({
-    label: m.label,
-    pnl: Object.values(m.ops).reduce((s,o)=>s+(o.pnl||0),0)
-  }));
-  const bestMonth = monthlyPnlMap2.reduce((b,m) => m.pnl > b.pnl ? m : b, monthlyPnlMap2[0]||{label:'—',pnl:0});
-  const worstMonth = monthlyPnlMap2.reduce((w,m) => m.pnl < w.pnl ? m : w, monthlyPnlMap2[0]||{label:'—',pnl:0});
-
-  // Frecuencia de operaciones por semana
-  const weekMap = {};
-  closed.forEach(r => {
-    const d = parseDate(r.Fecha); if (!d) return;
-    const yr = d.getFullYear();
-    const wk = Math.ceil((((d - new Date(yr,0,1))/86400000) + new Date(yr,0,1).getDay()+1)/7);
-    const key = yr+'-W'+String(wk).padStart(2,'0');
-    if (!weekMap[key]) weekMap[key] = { key, label: key, ops: 0, tp: 0, sl: 0 };
-    weekMap[key].ops++;
-    if (isTP(r)) weekMap[key].tp++;
-    if (isSL(r)) weekMap[key].sl++;
-  });
-  const weeklyFreq = Object.values(weekMap).sort((a,b)=>a.key<b.key?-1:1);
-  const avgOpsPerWeek = weeklyFreq.length > 0 ? weeklyFreq.reduce((s,w)=>s+w.ops,0)/weeklyFreq.length : 0;
-
-  // ── NEW METRICS ──
-  // Expectancy per trade in euros (based on 100k account)
-  // Each TP = +1.5% of 100k = +1500€, each SL = -1.5% = -1500€
-  const baseCapital = 100000;
-  const riskPct = 0.015;
-  const expectancyEur = closed.length > 0
-    ? ((closed.filter(isTP).length * baseCapital * riskPct) - (closed.filter(isSL).length * baseCapital * riskPct)) / closed.length
-    : 0;
-
-  // Avg Win / Avg Loss / Payoff Ratio
-  const winPnls = sorted.filter(r => pnl(r) > 0).map(r => pnl(r));
-  const lossPnls = sorted.filter(r => pnl(r) < 0).map(r => Math.abs(pnl(r)));
-  const avgWin = winPnls.length ? winPnls.reduce((a,b)=>a+b,0)/winPnls.length : 0;
-  const avgLoss = lossPnls.length ? lossPnls.reduce((a,b)=>a+b,0)/lossPnls.length : 0;
-  const payoffRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
-
-  // Best / Worst trade
-  const bestTrade = sorted.reduce((best, r) => pnl(r) > pnl(best) ? r : best, sorted[0] || {});
-  const worstTrade = sorted.reduce((worst, r) => pnl(r) < pnl(worst) ? r : worst, sorted[0] || {});
-
-  // Recovery Factor = NetPnL / MaxDD
-  const recoveryFactor = maxDD > 0 ? netPnl / maxDD : 0;
-
-  // Calmar Ratio = annualized return / MaxDD
-  const periodsInYear = nM > 0 ? 12 / nM : 1;
-  const annualizedReturn = netPnl * periodsInYear;
-  const calmarRatio = maxDD > 0 ? annualizedReturn / maxDD : 0;
-
-  // % time in drawdown
-  const inDD = equity.filter(e => e.dd > 0).length;
-  const pctTimeInDD = equity.length > 0 ? (inDD / equity.length * 100) : 0;
-
-  // Rolling Win Rate (last 10 closed trades)
-  const last10 = sorted.slice(-10);
-  const rolling10Tp = last10.filter(r => pnl(r) > 0).length;
-  const rolling10Wr = last10.length > 0 ? rolling10Tp / last10.length * 100 : 0;
-  const rollingHistory = sorted.map((_, i) => {
-    const window = sorted.slice(Math.max(0, i-9), i+1);
-    const wTp = window.filter(r => pnl(r) > 0).length;
-    return { i: i+1, wr: wTp / window.length * 100, n: `N·${sorted[i]['N·']||sorted[i]['N']}` };
-  });
-
-  // Analysis by pair
-  const pairStats = {};
-  closed.forEach(r => {
-    const par = r.PAR || '?';
-    if (!pairStats[par]) pairStats[par] = { par, ops:0, tp:0, sl:0, grossW:0, grossL:0, netPnl:0 };
-    pairStats[par].ops++;
-    if (isTP(r)) { pairStats[par].tp++; pairStats[par].grossW += pnl(r); }
-    if (isSL(r)) { pairStats[par].sl++; pairStats[par].grossL += Math.abs(pnl(r)); }
-    pairStats[par].netPnl += pnl(r);
-  });
-  const pairArray = Object.values(pairStats).map(p => ({
-    ...p,
-    wr: p.ops > 0 ? p.tp/p.ops*100 : 0,
-    pf: p.grossL > 0 ? p.grossW/p.grossL : p.grossW > 0 ? Infinity : 0
-  })).sort((a,b) => b.wr - a.wr);
-
-  // Monthly bar data aware of filter (merge D&S into operator when filtered)
-  const monthlyBarDataFiltered = (filt) => {
-    const labels = Object.values(monthly).sort((a,b)=>a.key<b.key?-1:1).map(m=>m.label);
-    if (filt === 'all') return monthlyBarData;
-    // When filtered by Dani or Sergio, merge D&S into their data
-    const mergedOps = {};
-    labels.forEach((lbl, li) => {
-      const row = Object.values(monthly).find(m=>m.label===lbl);
-      const base = row?.ops[filt]?.pnl || 0;
-      const ds = row?.ops['D&S']?.pnl || 0;
-      mergedOps[lbl] = base + ds;
+  // 1) Capital en €
+  const eqC = $('eqChart');
+  if (eqC && tr.length) {
+    const { labels, breaks } = monthTicks(tr.map(x => x.day), 1, eqC);
+    const data = [CFG.CAPITAL, ...tr.map(x => x.eq)];
+    // Decimales según el paso entre marcas (evita etiquetas repetidas tipo "101k" / "101k")
+    const opt = baseOptions(t, labels, (v, _i, ticks) => {
+      const step = ticks && ticks.length > 1 ? Math.abs(ticks[1].value - ticks[0].value) : 1000;
+      return fmtNum(v / 1000, step >= 1000 ? 0 : step >= 100 ? 1 : 2) + 'k €';
     });
-    return { labels, series: { [filt]: labels.map(l => mergedOps[l] || 0) } };
-  };
+    opt.plugins.xMarkers = { at: breaks, color: t.grid };
+    opt.plugins.hLines = { lines: [{ y: CFG.CAPITAL, color: t.muted, dash: [4, 4], width: 1 }] };
+    opt.plugins.tooltip.callbacks = {
+      title: it => it[0].dataIndex === 0 ? 'Capital inicial' : tradeTitle(it[0].dataIndex - 1),
+      label: it => {
+        if (it.dataIndex === 0) return `Capital: ${fmtEur(CFG.CAPITAL)}`;
+        const x = tr[it.dataIndex - 1];
+        return [`Capital: ${fmtEur(x.eq)}`, `${outLabel(x.out)} ${fmtR(x.R, 1)} (${fmtEur(x.pnl, true)})`, `${x.par}${x.dir ? ' · ' + x.dir : ''} · N·${x.nraw}`];
+      }
+    };
+    charts.push(new Chart(eqC, {
+      type: 'line',
+      data: { labels, datasets: [{
+        data, borderColor: t.accent, borderWidth: 2, cubicInterpolationMode: 'monotone', tension: 0.4,
+        pointRadius: 0, pointHoverRadius: 4.5, pointHoverBackgroundColor: t.accent, pointHoverBorderColor: t.panel, pointHoverBorderWidth: 2,
+        fill: { target: { value: CFG.CAPITAL }, above: `rgba(${t.accentRgb},0.10)`, below: `rgba(${t.badRgb},0.12)` }
+      }] },
+      options: opt
+    }));
+  }
 
-  return { total: data.length, closed: closed.length, open: open.length, tp, sl, wr, pf, netPnl, maxDD, sharpe: isFinite(sharpeRaw) ? sharpeRaw : 0, sortino: isFinite(sortinoRaw) ? sortinoRaw : 0, nMonths: nM, maxDDPeak: +maxDDPeak.toFixed(2), maxDDValley: +maxDDValley.toFixed(2), maxW, maxL, equity, tipos, ops, monthly: Object.values(monthly).sort((a, b) => a.key < b.key ? -1 : 1), days: Object.values(days), allOps, openTrades: open, tpDurAvg: avgDur(tpDur), slDurAvg: avgDur(slDur), finalEuroAcc: euroAcc, opEquity, monthlyBarData, pctPosMonths, posMonths, bestMonth, worstMonth, avgMonthlyPnl, accountAgeLabel, accountAgeDays, cagr, firstDate, weeklyFreq, avgOpsPerWeek, avgWin, avgLoss, payoffRatio, expectancyEur, bestTrade, worstTrade, recoveryFactor, calmarRatio, pctTimeInDD, rolling10Wr, rollingHistory, pairArray, monthlyBarDataFiltered };
+  // 2) Drawdown
+  const ddC = $('ddChart');
+  if (ddC && tr.length) {
+    const { labels, breaks } = monthTicks(tr.map(x => x.day), 1, ddC);
+    const data = [0, ...tr.map(x => -x.dd * 100)];
+    const minV = Math.min(...data);
+    const opt = baseOptions(t, labels, v => fmtNum(v, 0) + '%');
+    opt.scales.y.max = 0;
+    opt.scales.y.suggestedMin = Math.min(-1, minV * 1.15);
+    opt.plugins.xMarkers = { at: breaks, color: t.grid };
+    opt.plugins.tooltip.callbacks = {
+      title: it => it[0].dataIndex === 0 ? 'Capital inicial' : tradeTitle(it[0].dataIndex - 1),
+      label: it => {
+        if (it.dataIndex === 0) return 'Drawdown: 0,00%';
+        const x = tr[it.dataIndex - 1];
+        return x.dd > EPS ? [`Drawdown: ${fmtPct(-x.dd, 2)} (${fmtEur(x.eq - x.peak, true)})`, `Máximo previo: ${fmtEur(x.peak)}`] : ['En máximos de capital', `Capital: ${fmtEur(x.eq)}`];
+      }
+    };
+    charts.push(new Chart(ddC, {
+      type: 'line',
+      data: { labels, datasets: [{ data, borderColor: t.bad, borderWidth: 1.5, tension: 0, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: t.bad, pointHoverBorderColor: t.panel, pointHoverBorderWidth: 2, fill: { target: 'origin', below: `rgba(${t.badRgb},0.14)` } }] },
+      options: opt
+    }));
+  }
+
+  // 3) Frecuencia semanal
+  const fC = $('freqChart');
+  if (fC && M.weeks.length) {
+    const wk = M.weeks;
+    const labels = new Array(wk.length).fill('');
+    let prev = null, lastL = -1e9;
+    const w = fC.parentElement.clientWidth || 800;
+    const minGap = Math.max(1, Math.ceil(34 / Math.max(1, w / wk.length)));
+    wk.forEach((x, i) => { const mi = monthIdx(x.ws); if (mi !== prev) { if (i - lastL >= minGap) { labels[i] = MES[mi % 12]; lastL = i; } prev = mi; } });
+    const opt = baseOptions(t, labels, v => Number.isInteger(v) ? String(v) : '');
+    opt.scales.y.beginAtZero = true;
+    opt.scales.y.ticks.precision = 0;
+    opt.plugins.crosshair = { color: null };
+    opt.plugins.hLines = { lines: [{ y: M.totals.opsWeek, color: t.text2, dash: [4, 4], width: 1.25 }] };
+    opt.plugins.tooltip.callbacks = {
+      title: it => `Semana del ${fmtDate(wk[it[0].dataIndex].ws)}`,
+      label: it => it.datasetIndex === 0 ? `${wk[it.dataIndex].count} ${plural(wk[it.dataIndex].count, 'operación', 'operaciones')}` : (it.raw == null ? null : `Media móvil 4 sem.: ${fmtNum(it.raw, 1)}`)
+    };
+    opt.plugins.tooltip.filter = it => it.raw != null;
+    opt.plugins.tooltip.itemSort = (a, b) => a.datasetIndex - b.datasetIndex;
+    charts.push(new Chart(fC, {
+      data: { labels, datasets: [
+        { type: 'bar', data: wk.map(x => x.count), backgroundColor: t.bar, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom', maxBarThickness: 18, categoryPercentage: 0.8, barPercentage: 0.9, order: 2 },
+        { type: 'line', data: wk.map(x => x.ma), borderColor: t.accent, borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, cubicInterpolationMode: 'monotone', spanGaps: false, order: 1 }
+      ] },
+      options: opt
+    }));
+  }
+
+  // 4) Win rate móvil
+  const rC = $('rollChart');
+  if (rC) {
+    const idx = [], vals = [], days = [];
+    M.rolling.forEach((v, i) => { if (v != null) { idx.push(i); vals.push(v * 100); days.push(tr[i].day); } });
+    const { labels, breaks } = monthTicks(days, 0, rC);
+    const opt = baseOptions(t, labels, v => v + '%');
+    opt.scales.y.min = 0; opt.scales.y.max = 100;
+    opt.scales.y.ticks.stepSize = 25;
+    opt.plugins.xMarkers = { at: breaks, color: t.grid };
+    const lines = [{ y: M.totals.wr * 100, color: t.text2, dash: [4, 4], width: 1.25 }];
+    if (M.totals.beWr != null) lines.push({ y: M.totals.beWr * 100, color: t.bad, dash: [4, 4], width: 1.25 });
+    opt.plugins.hLines = { lines };
+    opt.plugins.tooltip.callbacks = {
+      title: it => tradeTitle(idx[it[0].dataIndex]),
+      label: it => [`Win rate últimas ${CFG.ROLL_WIN}: ${fmtNum(it.raw, 0)}%`, `Global: ${fmtPct(M.totals.wr, 1, false)}`]
+    };
+    charts.push(new Chart(rC, {
+      type: 'line',
+      data: { labels, datasets: [{ data: vals, borderColor: t.accent, borderWidth: 2, cubicInterpolationMode: 'monotone', pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: t.accent, pointHoverBorderColor: t.panel, pointHoverBorderWidth: 2 }] },
+      options: opt
+    }));
+  }
 }
 
-// ─── HELPERS ───────────────────────────────────────
-function pct(v) { v = v || 0; return (v > 0 ? '+' : '') + v.toFixed(1) + '%'; }
-function pfStr(v) { if (!v && v !== 0) return '—'; return v === Infinity || v > 99 ? '∞' : v.toFixed(2); }
-function pnlColor(v) { return v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--muted)'; }
-function wrColor(v) { return v >= 70 ? 'var(--green)' : v >= 50 ? 'var(--yellow)' : 'var(--red)'; }
-const opColors = { Dani: 'var(--dani)', Sergio: 'var(--sergio)', 'D&S': 'var(--ds)' };
-const opHex = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
-function oc(op) { return opColors[op] || 'var(--blue)'; }
-function och(op) { return opHex[op] || '#4BA3E3'; }
-function tc(t) { return t === 'T1' ? 'var(--green)' : t === 'T3' ? 'var(--yellow)' : t === 'T4' ? 'var(--red)' : 'var(--muted)'; }
-function tch(t) { return t === 'T1' ? '#00D49A' : t === 'T3' ? '#FFB547' : t === 'T4' ? '#FF4C5E' : '#3A4A5C'; }
-
-// ─── CONNECT ───────────────────────────────────────
-async function connect() {
-  const input = document.getElementById('csvUrl');
-  const btn = document.getElementById('btnConnect');
-  const err = document.getElementById('errMsg');
-  let url = input.value.trim();
-  if (!url) return;
-  btn.disabled = true; btn.textContent = 'Guardando...'; err.textContent = '';
-  await loadData(url, err);
-  btn.disabled = false; btn.textContent = 'Guardar';
-  if (currentUrl) closeSetup();
+/* ── Datos ── */
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error('tiempo de espera agotado')), ms);
+    promise.then(v => { clearTimeout(id); resolve(v); }, e => { clearTimeout(id); reject(e); });
+  });
 }
-
 async function fetchWithFallback(url) {
-  const proxies = [
+  const routes = [
     u => u + (u.includes('?') ? '&' : '?') + 't=' + Date.now(),
     u => 'https://corsproxy.io/?' + encodeURIComponent(u),
     u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-    u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+    u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)
   ];
-  let lastErr = '';
-  for (const buildUrl of proxies) {
+  let last = '';
+  for (const build of routes) {
     try {
-      const res = await fetch(buildUrl(url));
-      if (!res.ok) { lastErr = 'HTTP ' + res.status; continue; }
+      const res = await withTimeout(fetch(build(url), { cache: 'no-store' }), 12000);
+      if (!res.ok) { last = 'HTTP ' + res.status; continue; }
       const text = await res.text();
-      // Si devuelve HTML (login de Google u otro error), ignorar
-      if (text.trim().startsWith('<')) { lastErr = 'Respuesta no válida'; continue; }
-      if (text.trim().length < 10) { lastErr = 'Respuesta vacía'; continue; }
+      if (text.trim().startsWith('<')) { last = 'respuesta no válida'; continue; }
+      if (text.trim().length < 10) { last = 'respuesta vacía'; continue; }
       return text;
-    } catch(e) { lastErr = e.message; }
+    } catch (e) { last = e.message; }
   }
-  throw new Error('No se pudo cargar la fuente de datos. Error: ' + lastErr);
+  throw new Error('no se pudo cargar la fuente de datos (' + last + ')');
 }
 
-async function loadData(url, errEl) {
+function normalizeUrl(url) {
+  url = url.trim();
   if (url.includes('docs.google.com/spreadsheets') && !url.includes('pub?') && !url.includes('export')) {
     const m = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (m) url = `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv&gid=0`;
+    const g = url.match(/[#&?]gid=(\d+)/);
+    if (m) url = `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv&gid=${g ? g[1] : '0'}`;
   }
+  return url.replace(/[&?]t=\d+/g, '');
+}
+
+async function loadData(url, { fromSetup = false } = {}) {
+  const first = !MODEL;
+  if (first) $('loading').classList.remove('hidden'); else $('content').classList.add('dim');
+  const btn = $('refreshBtn');
+  btn.disabled = true; btn.classList.add('busy');
   try {
-    document.getElementById('loading').style.display = 'flex';
     const text = await fetchWithFallback(url);
-    const { data } = Papa.parse(text, { header: true, skipEmptyLines: true });
-    if (!data.length) throw new Error('La hoja está vacía');
-    currentUrl = url;
-    currentRawData = data;
-    localStorage.setItem(CSV_KEY, url);
-    renderDash(compute(filterData(data, currentFilter)));
-    document.getElementById('loading').style.display = 'none';
+    const parsed = Papa.parse(text, { skipEmptyLines: 'greedy' });
+    if (!parsed.data || parsed.data.length < 2) throw new Error('la fuente de datos está vacía');
+    const model = buildModel(parsed.data, todayDay());
+    if (!model.uniqueCount) throw new Error('no se encontró la columna N· o no hay operaciones');
+    currentUrl = url; store(CSV_KEY, url);
+    loadedAt = new Date();
+    MODEL = model;
+    $('dash').classList.remove('hidden');
+    renderAll(model);
+    if (fromSetup) closeSetup();
   } catch (e) {
-    document.getElementById('loading').style.display = 'none';
-    if (errEl) errEl.textContent = 'Error: ' + e.message + '. Verifica que la URL es correcta y está accesible.';
-    else alert('Error al actualizar: ' + e.message);
+    const msg = 'Error: ' + e.message + '.';
+    if (fromSetup) $('setupErr').textContent = msg + ' Revisa que la dirección sea correcta y pública.';
+    else if (MODEL) { const b = $('banner'); if (b) b.innerHTML = `<div class="banner">No se pudieron actualizar los datos: ${esc(e.message)}. Se muestran los últimos datos cargados.</div>`; }
+    else showFatal(e.message);
+  } finally {
+    $('loading').classList.add('hidden');
+    $('content').classList.remove('dim');
+    btn.disabled = false; btn.classList.remove('busy');
   }
 }
-
-async function refresh() {
-  if (!currentUrl) { showSetup(); return; }
-  // Fuerza recarga limpia añadiendo timestamp único para evitar caché
-  const urlWithBust = currentUrl.replace(/[&?]t=\d*/g, '') + '&t=' + Date.now();
-  const btn = document.querySelector('.top-btns button');
-  if (btn) { btn.textContent = '⟳ Actualizando...'; btn.disabled = true; }
-  await loadData(urlWithBust, null);
-  if (btn) { btn.textContent = '⟳ Actualizar'; btn.disabled = false; }
+function showFatal(msg) {
+  $('dash').classList.remove('hidden');
+  $('content').innerHTML = `<div class="panel" style="margin-top:24px"><div class="panel-b"><div class="panel-t" style="margin-bottom:6px">No se pudieron cargar los datos</div><p class="c-muted" style="margin-bottom:14px">${esc(msg.charAt(0).toUpperCase() + msg.slice(1))}. Revisa tu conexión y vuelve a intentarlo.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="loadData(currentUrl)">Reintentar</button><button class="btn" onclick="showSetup()">Fuente de datos</button></div></div></div>`;
 }
 
-function showSetup() {
-  const modal = document.getElementById('setup');
-  modal.style.display = 'flex';
-  const inp = document.getElementById('csvUrl');
-  if (inp) inp.value = currentUrl;
+/* ── Configuración, tema y acceso ── */
+function showSetup() { $('csvUrl').value = currentUrl; $('setupErr').textContent = ''; $('setup').classList.remove('hidden'); }
+function closeSetup() { $('setup').classList.add('hidden'); }
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+function applyTheme(th) {
+  document.documentElement.setAttribute('data-theme', th);
+  store(THEME_KEY, th);
+  $('themeBtn').innerHTML = th === 'dark' ? ICON_SUN : ICON_MOON;
+  if (MODEL) renderAll(MODEL);
 }
-
-function closeSetup() {
-  document.getElementById('setup').style.display = 'none';
-}
-
-// ─── RENDER DASHBOARD ──────────────────────────────
-function renderDash(m) {
-  activeCharts.forEach(c => { try { c.destroy(); } catch (e) {} }); activeCharts = [];
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('dash').style.display = 'block';
-  const filterLabel = currentFilter === 'all' ? 'Todos los operadores' : 
-    currentFilter === 'D&S' ? 'D&S — Operaciones conjuntas' :
-    `${currentFilter} (incluye D&S)`;
-  document.getElementById('topSub').textContent = `${filterLabel} · ${m.closed} cerradas · ${m.open} abiertas · ${new Date().toLocaleString('es-ES')}`;
-
-  // Transposed matrix: operators as rows, months as columns
-  const monthLabels = m.monthly.map(function(row) { return row.label; });
-  const monthRows = (function() {
-    var html = "<thead><tr>";
-    html += '<th style="padding:9px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Operador</th>';
-    monthLabels.forEach(function(lbl) {
-      html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)" colspan="2">' + lbl + "</th>";
-    });
-    html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">Total</th>';
-    html += '<th class="r" style="padding:9px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">WR</th>';
-    html += "</tr></thead><tbody>";
-    var numStyle = "font-weight:700;font-family:Inter,sans-serif;font-variant-numeric:tabular-nums";
-    var subStyle = "font-size:11px;color:var(--textSub)";
-
-    m.allOps.forEach(function(op) {
-      html += '<tr style="border-top:0.5px solid var(--border)">';
-      html += '<td style="padding:9px 14px;font-weight:600;color:' + oc(op) + '">' + op + "</td>";
-      var opTp = 0, opSl = 0, opPnl = 0;
-      m.monthly.forEach(function(row) {
-        var od = row.ops[op];
-        if (od) { opTp += od.tp; opSl += od.sl; opPnl += od.pnl; }
-        html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + (od ? od.tp + " TP  " + od.sl + " SL" : "—") + "</td>";
-        html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + (od ? pnlColor(od.pnl) : "var(--muted)") + '">' + (od ? pct(od.pnl) : "—") + "</td>";
-      });
-      var opWr = (opTp + opSl) > 0 ? opTp / (opTp + opSl) * 100 : null;
-      html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(opPnl) + '">' + pct(opPnl) + "</td>";
-      html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:Inter,sans-serif;color:' + (opWr !== null ? opWr >= 70 ? "var(--green)" : opWr >= 50 ? "var(--yellow)" : "var(--red)" : "var(--muted)") + '">' + (opWr !== null ? opWr.toFixed(0) + "%" : "—") + "</td>";
-      html += "</tr>";
-    });
-
-    // Global row
-    html += '<tr style="border-top:1px solid var(--borderHi)">';
-    html += '<td style="padding:9px 14px;font-weight:600;color:var(--text)">Global</td>';
-    var gTp = 0, gSl = 0, gPnl = 0;
-    m.monthly.forEach(function(row) {
-      var mTp = 0, mSl = 0, mPnl = 0;
-      m.allOps.forEach(function(op) {
-        mTp += row.ops[op] ? row.ops[op].tp : 0;
-        mSl += row.ops[op] ? row.ops[op].sl : 0;
-        mPnl += row.ops[op] ? row.ops[op].pnl : 0;
-      });
-      gTp += mTp; gSl += mSl; gPnl += mPnl;
-      var mWr = (mTp + mSl) > 0 ? mTp / (mTp + mSl) * 100 : null;
-      html += '<td class="r" style="padding:9px 14px;' + subStyle + ';border-left:0.5px solid var(--border)">' + mTp + " TP  " + mSl + " SL</td>";
-      html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(mPnl) + '">' + pct(mPnl) + "</td>";
-    });
-    var gWr = (gTp + gSl) > 0 ? gTp / (gTp + gSl) * 100 : null;
-    html += '<td class="r" style="padding:9px 14px;' + numStyle + ';color:' + pnlColor(gPnl) + '">' + pct(gPnl) + "</td>";
-    html += '<td class="r" style="padding:9px 14px;font-weight:700;font-family:Inter,sans-serif;color:' + (gWr !== null ? gWr >= 70 ? "var(--green)" : gWr >= 50 ? "var(--yellow)" : "var(--red)" : "var(--muted)") + '">' + (gWr !== null ? gWr.toFixed(0) + "%" : "—") + "</td>";
-    html += "</tr></tbody>";
-    return html;
-  })();
-
-  const tipoCards = Object.entries(m.tipos).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([tipo, t]) => {
-    const wr2 = t.ops ? t.tp / t.ops * 100 : 0;
-    const pf2 = t.grossL > 0 ? t.grossW / t.grossL : t.grossW > 0 ? Infinity : 0;
-    const exp = t.ops ? (t.netPnl / 1.5 / t.ops) : 0;
-    return `<div class="card" style="border-color:${tch(tipo)}44">
-      <div class="card-h"><span style="font-size:20px;font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${tc(tipo)}">${tipo}</span><span class="badge" style="background:${tch(tipo)}22;color:${tc(tipo)}">${t.ops} ops</span></div>
-      ${[['Win Rate', wr2.toFixed(1) + '%', pnlColor(wr2 - 50)],
-        ['Profit Factor', pfStr(pf2), pf2 >= 2 ? 'var(--green)' : pf2 >= 1 ? 'var(--yellow)' : 'var(--red)'],
-        ['Expectancy', (exp >= 0 ? '+' : '') + exp.toFixed(2) + 'R', pnlColor(exp)],
-        ['P&L Neto', pct(t.netPnl), pnlColor(t.netPnl)]]
-        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
-      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px"><div style="width:${wr2}%;height:100%;background:${tch(tipo)};border-radius:3px"></div></div>
-    </div>`;
-  }).join('');
-
-  const daysSorted = [...m.days].map(d => { d.wr = d.ops ? d.tp/d.ops*100 : 0; return d; }).sort((a, b) => b.wr - a.wr).map(d => {
-    const col = d.wr >= 75 ? '#00D49A' : d.wr >= 60 ? '#FFB547' : '#FF4C5E';
-    return `<div class="heatrow">
-      <span style="font-size:11px;font-weight:500;min-width:82px">${d.dia}</span>
-      <div class="heat-wrap"><div class="heat-bar" style="width:${d.wr}%;background:${col}66"></div>
-        <span class="heat-lbl">${d.tp} TP  ${d.sl} SL  ${d.ops} ops</span></div>
-      <span style="font-size:12px;font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${col};min-width:38px;text-align:right">${d.wr.toFixed(0)}%</span>
-      <span style="font-size:11px;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${d.pnl >= 0 ? '#00D49A' : '#FF4C5E'};min-width:48px;text-align:right">${pct(d.pnl)}</span>
-    </div>`;
-  }).join('');
-
-  const seqHTML = m.equity.map(e => {
-    const col = e.res === 'TP' ? '#00D49A' : e.res === 'SL' ? '#FF4C5E' : '#FFB547';
-    return `<div class="sq" title="${e.n} · ${e.op} · ${e.res}" style="background:${col}22;border:1px solid ${col}44;color:${col}">${e.res}</div>`;
-  }).join('');
-
-  const openHTML = m.openTrades.length ? m.openTrades.map(r => `
-    <div class="open-row">
-      <span class="badge" style="background:${tch(r.Tipo)}22;color:${tc(r.Tipo)}">${r.Tipo || '—'}</span>
-      <span style="font-weight:600;color:${oc(r.Operador)}">${r.Operador}</span>
-      <span style="font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums">${r.PAR}</span>
-      <span style="color:${r.Dirección === 'Alcista' ? 'var(--green)' : 'var(--red)'}">${r.Dirección || '—'}</span>
-      <span style="color:var(--textSub);font-size:11px;margin-left:auto">${r.Fecha || ''}</span>
-    </div>`).join('') : '<p style="font-size:12px;color:var(--textSub)">Sin operaciones abiertas actualmente</p>';
-
-
-  const kpiHTML = `<div class="kpis">
-    ${[['Retorno Neto', pct(m.netPnl), 'Cuenta base 100', pnlColor(m.netPnl)],
-      ['Win Rate', m.wr.toFixed(1) + '%', m.tp+'TP / '+m.sl+'SL', m.wr >= 60 ? 'var(--green)' : 'var(--red)'],
-      ['Profit Factor', pfStr(m.pf), 'Gross W / Gross L', m.pf >= 2 ? 'var(--green)' : m.pf >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Max Drawdown', m.maxDD.toFixed(2)+'%', m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
-      ['Calmar Ratio', m.calmarRatio.toFixed(2), 'Retorno anual. / Max DD', m.calmarRatio >= 3 ? 'var(--green)' : m.calmarRatio >= 1 ? 'var(--yellow)' : 'var(--red)'],
-      ['Ganancia / Trade', (m.expectancyEur>=0?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.expectancyEur)+'\u20ac', 'Expectativa media \xb7 base 100k', m.expectancyEur>=0?'var(--green)':'var(--red)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>
-  <div class="kpis" style="margin-top:9px">
-    ${[['Sharpe (Anual.)', m.sharpe.toFixed(2), m.nMonths < 12 ? 'Solo '+m.nMonths+' meses · No fiable' : 'Sobre '+m.nMonths+' meses · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Sortino (Anual.)', m.sortino.toFixed(2), m.nMonths < 12 ? 'Mín. 12 meses para ser fiable' : 'Downside mensual · ×√12', m.nMonths < 12 ? 'var(--yellow)' : 'var(--textSub)'],
-      ['Rent. Media Mensual', (m.avgMonthlyPnl>=0?'+':'')+m.avgMonthlyPnl.toFixed(1)+'%', 'Media de '+m.nMonths+' meses operados', pnlColor(m.avgMonthlyPnl)],
-      ['Mejor Mes', (m.bestMonth?.pnl>=0?'+':'')+m.bestMonth?.pnl?.toFixed(1)+'%', m.bestMonth?.label||'—', 'var(--green)'],
-      ['Peor Mes', (m.worstMonth?.pnl>=0?'+':'')+m.worstMonth?.pnl?.toFixed(1)+'%', m.worstMonth?.label||'—', pnlColor(m.worstMonth?.pnl||0)],
-      ['Ops / Semana', m.avgOpsPerWeek.toFixed(1), 'Frecuencia media semanal', 'var(--textSub)']
-    ].map(([l,v,s,c]) => '<div class="kpi"><div class="kpi-l">'+l+'</div><div class="kpi-v" style="color:'+c+'">'+v+'</div><div class="kpi-s">'+s+'</div></div>').join('')}
-  </div>`;
-
-  const opCardNote = (currentFilter === 'Dani' || currentFilter === 'Sergio')
-    ? `<div style="font-size:10px;color:var(--yellow);background:rgba(255,181,71,0.1);border:0.5px solid rgba(255,181,71,0.2);border-radius:5px;padding:4px 8px;margin-bottom:10px">
-        ⚠ Incluye ops conjuntas D&S
-       </div>` : '';
-  const opCards = m.allOps.map(op => {
-    const o = m.ops[op] || {};
-    const dsCount = m.allOps.includes('D&S') ? (m.ops['D&S']?.ops || 0) : 0;
-    const showDSNote = (currentFilter === 'all') && op !== 'D&S' && dsCount > 0;
-    return `<div class="card" style="border-color:${och(op)}44">
-      <div class="card-h"><span class="card-t" style="color:${oc(op)}">${op}</span><span class="badge" style="background:${och(op)}22;color:${oc(op)}">${o.ops || 0} ops</span></div>
-      ${showDSNote ? `<div style="font-size:10px;color:var(--textSub);margin-bottom:8px">Solo ops individuales · D&S se analiza por separado</div>` : ''}
-      ${currentFilter !== 'all' && op !== 'D&S' ? `<div style="font-size:10px;color:rgba(255,181,71,0.9);margin-bottom:8px">Incluye ${dsCount} ops D&S</div>` : ''}
-      ${[['P&L Neto', pct(o.netPnl || 0), pnlColor(o.netPnl || 0)],
-        ['Win Rate', (o.wr || 0).toFixed(1) + '%', pnlColor((o.wr || 0) - 50)],
-        ['Profit Factor', pfStr(o.pf || 0), (o.pf || 0) >= 2 ? 'var(--green)' : (o.pf || 0) >= 1 ? 'var(--yellow)' : 'var(--red)'],
-        ['TP / SL', (o.tp||0)+' TP  '+(o.sl||0)+' SL', 'var(--textSub)']]
-        .map(([l, v, c]) => `<div class="kv"><span class="kv-l">${l}</span><span class="kv-v" style="color:${c}">${v}</span></div>`).join('')}
-    </div>`;
-  }).join('');
-
-
-
-  document.getElementById('content').innerHTML = `
-    ${kpiHTML}
-
-    <!-- SECCIÓN: Simulación €100k -->
-    <div class="sec"><span class="sec-n">01</span><span class="sec-t">Evolución sobre 100.000€</span><div class="sec-l"></div></div>
-    <div class="panel">
-      <div class="panel-h">Evolución del Capital</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 18px 0" class="euro-cards">
-        ${[
-          ['Capital Inicial', '100.000€', 'var(--text)'],
-          ['Capital Actual', new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.finalEuroAcc)+'€', m.finalEuroAcc>=100000?'var(--green)':'var(--red)'],
-          ['Beneficio Neto', (m.finalEuroAcc>=100000?'+':'')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(m.finalEuroAcc-100000)+'€', m.finalEuroAcc>=100000?'var(--green)':'var(--red)'],
-          ['Rendimiento', (m.netPnl>=0?'+':'')+m.netPnl.toFixed(1)+'%', m.netPnl>=0?'var(--green)':'var(--red)'],
-          ['Rent. Anualizada', (m.cagr>=0?'+':'')+m.cagr.toFixed(1)+'%', m.cagr>=0?'var(--green)':'var(--red)'],
-          ['Edad de la Cuenta', m.accountAgeDays+' días', 'var(--text)'],
-          ['Operaciones', m.closed+' cerradas', 'var(--text)']
-        ].map(([l,v,c]) => '<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:7px;padding:6px 12px;display:flex;flex-direction:column;gap:1px;min-width:100px;flex:1">'
-          +'<span style="font-size:9px;color:var(--textSub);text-transform:uppercase;letter-spacing:0.08em;font-weight:500">'+l+'</span>'
-          +'<span style="font-size:15px;font-weight:600;color:'+c+';font-family:Inter,sans-serif;font-variant-numeric:tabular-nums;line-height:1.3">'+v+'</span>'
-          +'</div>').join('')}
-      </div>
-      <div style="padding:14px 18px;position:relative;height:300px;min-height:300px">
-        <canvas id="euroChart" style="display:block;width:100%;height:100%" role="img" aria-label="Evolución cuenta 100k euros"></canvas>
-      </div>
-      <div style="padding:4px 18px 14px;font-size:11px;color:var(--textSub)">
-        Riesgo fijo — cada operación arriesga siempre el 1.5% sobre los 100.000€ iniciales (1.500€ por operación).
-      </div>
-    </div>
-
-        <div class="sec"><span class="sec-n">02</span><span class="sec-t">Consistencia y Rendimiento</span><div class="sec-l"></div></div>
-    >
-    <div class="grid2">
-      <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
-        ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],
-          ['Racha Máx. Perdedora', m.maxL+' SL consecutivos', '#FF4C5E'],
-          ['Max Drawdown', '−'+m.maxDD.toFixed(2)+'% · '+m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],
-          ['Riesgo de Ruina', '< 0.1%', '#00D49A'],
-          ['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],
-          ['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']]
-          .map(([l, v, c]) => '<div class="kv" style="padding:8px 16px"><span class="kv-l">'+l+'</span><span class="kv-v" style="color:'+c+'">'+v+'</span></div>').join('')}
-      </div>
-      <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
-    </div>
-
-      <div style="overflow-x:auto"><table class="tbl">${monthRows}</table></div>
-    </div>
-
-    <div class="sec"><span class="sec-n">03</span><span class="sec-t">Atribución por Operador</span><div class="sec-l"></div></div>
-    <div class="cards3">${opCards}</div>
-</div>
-
-    <div class="sec"><span class="sec-n">04</span><span class="sec-t">Calidad del Sistema — Análisis por Par</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Rendimiento por Par — WR, P&L y Profit Factor</div>
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <table class="tbl" id="pairTable"></table>
-      </div>
-    </div>
-
-    <!-- SECCIÓN: Rolling Win Rate -->
-    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Gestión del Riesgo</span><div class="sec-l"></div></div>
-    
-    <!-- Equity curve collapsible -->
-    <div class="panel" style="margin-bottom:12px">
-      <div class="panel-h" onclick="this.parentElement.querySelector('.eq-collapse').style.display=this.parentElement.querySelector('.eq-collapse').style.display==='none'?'block':'none'" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center">
-        <span>Curva de Equity (Base 100%)</span>
-        <span style="font-size:11px;color:var(--blue);font-weight:500">Ver / Ocultar ▾</span>
-      </div>
-      <div class="eq-collapse" style="display:none">
-        <div style="padding:14px 18px;position:relative;height:210px">
-          <canvas id="eqChart" role="img" aria-label="Curva de equity acumulado por operación">Equity acumulado.</canvas>
-        </div>
-      </div>
-    </div>
-<div class="grid2">
-      <div class="panel"><div class="panel-h">Métricas de Riesgo</div>
-        ${[['Racha Máx. Ganadora', m.maxW+' TP consecutivos', '#00D49A'],['Racha Máx. Perdedora', m.maxL+' SL consecutivos', '#FF4C5E'],['Max Drawdown', '−'+m.maxDD.toFixed(2)+'% · '+m.maxDDPeak.toFixed(1)+'% → '+m.maxDDValley.toFixed(1)+'%', '#FF4C5E'],['Riesgo de Ruina', '< 0.1%', '#00D49A'],['Sharpe Anualizado', m.sharpe.toFixed(3), 'var(--textSub)'],['Sortino Anualizado', m.sortino.toFixed(3), 'var(--textSub)']].map(([l,v,c]) => '<div class="kv" style="padding:8px 16px"><span class="kv-l">'+l+'</span><span class="kv-v" style="color:'+c+'">'+v+'</span></div>').join('')}
-      </div>
-      <div class="panel"><div class="panel-h">Secuencia Cronológica de Resultados</div><div class="seq">${seqHTML}</div></div>
-    </div>
-    <div class="sec"><span class="sec-n">06</span><span class="sec-t">Eficiencia Operativa</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Frecuencia de Operaciones — Actividad Semanal</div>
-      <div style="padding:14px 18px;position:relative;height:160px">
-        <canvas id="freqChart" role="img" aria-label="Frecuencia semanal">Ops por semana.</canvas>
-      </div>
-      <div style="padding:4px 18px 14px;display:flex;gap:18px;font-size:11px;color:var(--textSub);flex-wrap:wrap">
-        <span>Media global: <strong style="color:#FFB547">${m.avgOpsPerWeek.toFixed(1)} ops/sem</strong></span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:20px;height:2px;background:#4BA3E3;border-radius:2px"></span>Media móvil (4 sem.)</span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:20px;height:2px;background:#FFB547;border-radius:2px;border-top:2px dashed #FFB547"></span>Media global</span>
-      </div>
-    </div>
-      <div class="panel"><div class="panel-h">Duración Media por Resultado</div>
-        <div class="panel-body">
-          ${[['Take Profit', m.tpDurAvg, '#00D49A'], ['Stop Loss', m.slDurAvg, '#FF4C5E']].map(([l, v, c]) => `
-            <div style="margin-bottom:16px">
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                <span style="font-size:13px;font-weight:600;color:${c}">${l}</span>
-                <span style="font-size:18px;font-weight:700;font-family:'Inter','DM Sans',sans-serif;font-variant-numeric:tabular-nums;color:${c}">${v.toFixed(2)} días</span>
-              </div>
-              <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-                <div style="width:${Math.min(v / 7 * 100, 100)}%;height:100%;background:${c};border-radius:3px"></div>
-              </div>
-            </div>`).join('')}
-          <div style="background:rgba(75,163,227,0.1);border:1px solid rgba(75,163,227,0.2);border-radius:7px;padding:9px 12px;font-size:11px;color:var(--blue);line-height:1.6">
-            El SL se activa <strong>${(m.tpDurAvg / Math.max(m.slDurAvg, 0.01)).toFixed(1)}×</strong> más rápido que el TP. 88% de los TP se resuelven en ≤2 días.
-          </div>
-        </div>
-      </div>
-      <div class="panel"><div class="panel-h">Mapa de Calor — Día de Entrada</div>
-        <div class="panel-body">${daysSorted}</div>
-      </div>
-    </div>
-
-    <!-- SECCIÓN: Análisis por Par -->
-    <div class="sec"><span class="sec-n">07</span><span class="sec-t">Estado Actual — Rendimiento Reciente</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-h">Evolución del Win Rate — Ventana Móvil de 10 Ops</div>
-      <div style="padding:14px 18px;position:relative;height:180px">
-        <canvas id="rollingWrChart" role="img" aria-label="Rolling win rate últimas 10 operaciones">Win rate móvil.</canvas>
-      </div>
-      <div style="padding:4px 18px 14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <div style="font-size:11px;color:var(--textSub)">Última ventana de 10 ops:</div>
-        <div style="font-size:14px;font-weight:700;color:${m.rolling10Wr>=70?'var(--green)':m.rolling10Wr>=50?'var(--yellow)':'var(--red)'}">${m.rolling10Wr.toFixed(0)}%</div>
-        <div style="font-size:11px;color:var(--textSub)">WR global: <strong style="color:var(--text)">${m.wr.toFixed(1)}%</strong></div>
-      </div>
-    </div>
-
-    <!-- SECCIÓN: WR Mensual por Operador -->
-    
-    <div class="panel" style="margin-top:12px">
-      <div class="panel-h">WinRate Mensual (%) — Desglose por Operador</div>
-      <div id="monthlyWrBadges" style="padding:16px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"></div>
-    </div>
-
-    ${m.openTrades.length ? `
-    <div class="sec"><span class="sec-n">05</span><span class="sec-t">Operaciones Abiertas</span><div class="sec-l"></div></div>
-    <div class="panel"><div class="panel-body">${openHTML}</div></div>` : ''}
-
-    <div class="footer">
-      <span>Dashboard operativo · Riesgo fijo 1.5%/op</span>
-      <span>Última Actualización: ${new Date().toLocaleString('es-ES')}</span>
-    </div>
-  `;
-
-  setTimeout(() => {
-    const ctx = document.getElementById('eqChart');
-    if (ctx && m.equity.length) {
-      const c = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: m.equity.map((e, i) => i + 1),
-          datasets: [{
-            data: m.equity.map(e => e.eq),
-            borderColor: '#00D49A', borderWidth: 2, tension: 0.3, fill: false,
-            pointBackgroundColor: m.equity.map(e => e.res === 'TP' ? '#00D49A' : e.res === 'SL' ? '#FF4C5E' : '#FFB547'),
-            pointRadius: 3, pointBorderColor: '#070A0F', pointBorderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: (items) => { const e = m.equity[items[0].dataIndex]; return `Op ${items[0].label} · ${e.n}`; },
-                label: (ctx) => {
-                  const e = m.equity[ctx.dataIndex];
-                  const sign = e.pnlV >= 0 ? '+' : '';
-                  return [
-                    `${e.op} · ${e.res}`,
-                    `Equity: ${ctx.parsed.y.toFixed(2)}%`,
-                    `Op: ${sign}${e.pnlV.toFixed(1)}%`
-                  ];
-                }
-              }
-            }
-          },
-          scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-          }
-        }
-      });
-      activeCharts.push(c);
-    }
-
-    // Per-operator equity curves
-    const opEqCtx = document.getElementById('opEqChart');
-    if (opEqCtx && m.opEquity) {
-      const opHexMap = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
-      const datasets = m.allOps.filter(op => m.opEquity[op]?.length).map(op => ({
-        label: op,
-        data: m.opEquity[op].map(e => e.eq),
-        borderColor: opHexMap[op] || '#4BA3E3',
-        borderWidth: 2, tension: 0.3, fill: false,
-        pointRadius: 3,
-        pointBackgroundColor: m.opEquity[op].map(e => e.res==='TP'?(opHexMap[op]||'#4BA3E3'):e.res==='SL'?'#FF4C5E':'#FFB547'),
-        pointBorderColor: '#070A0F', pointBorderWidth: 1
-      }));
-      // Use longest label set
-      const maxOp = m.allOps.reduce((a,b) => (m.opEquity[a]?.length||0) > (m.opEquity[b]?.length||0) ? a : b);
-      const c2 = new Chart(opEqCtx, {
-        type: 'line',
-        data: { labels: m.opEquity[maxOp]?.map((_,i)=>i+1) || [], datasets },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: (items) => {
-                  const idx = items[0].dataIndex;
-                  // Find which month this op belongs to
-                  let cumOps = 0;
-                  let monthLabel = '';
-                  for (const row of m.monthly) {
-                    const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
-                    cumOps += mOps;
-                    if (idx < cumOps) { monthLabel = row.label; break; }
-                  }
-                  return 'Op #'+items[0].label + (monthLabel ? ' · '+monthLabel : '');
-                },
-                label: (ctx) => {
-                  const op = ctx.dataset.label;
-                  const eq = ctx.parsed.y;
-                  const data = m.opEquity[op]?.[ctx.dataIndex];
-                  const sign = data?.pnlV >= 0 ? '+' : '';
-                  return [op, 'Equity: '+eq.toFixed(2)+'%', data ? 'Op: '+sign+data.pnlV.toFixed(1)+'% · '+data.res : ''].filter(Boolean);
-                }
-              }
-            },
-            annotation: {
-              annotations: (() => {
-                const ann = {};
-                // Build month boundary annotations from sorted data
-                const opSorted = m.opEquity[m.allOps[0]] || [];
-                let prevMonth = null;
-                opSorted.forEach((e, i) => {
-                  // Get month from equity data - approximate using index
-                  const globalIdx = m.equity.findIndex(eq => eq.n === e.n);
-                  if (globalIdx < 0) return;
-                  const sorted = m.equity;
-                  // We'll use the month separators from monthlyLabels
-                });
-                // Use monthly data to find boundaries
-                let cumOps = 0;
-                m.monthly.forEach((row, mi) => {
-                  const monthOps = m.allOps.reduce((s, op) => s + (row.ops[op]?.tp||0) + (row.ops[op]?.sl||0), 0);
-                  if (mi < m.monthly.length - 1 && monthOps > 0) {
-                    cumOps += monthOps;
-                    ann['month'+mi] = {
-                      type: 'line',
-                      xMin: cumOps - 0.5,
-                      xMax: cumOps - 0.5,
-                      borderColor: 'rgba(128,128,128,0.35)',
-                      borderWidth: 1.5,
-                      borderDash: [5, 4],
-                      label: { display: false }
-                    };
-                  }
-                });
-                return ann;
-              })()
-            }
-          },
-          scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Operación #', color: '#5A7A9A', font: { size: 9 } } },
-            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-          }
-        }
-      });
-      activeCharts.push(c2);
-    }
-
-    // Monthly PnL bar chart
-    const mbCtx = document.getElementById('monthlyBarChart');
-    if (mbCtx && m.monthlyBarData) {
-      const opHexMap2 = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
-      const filteredBarData = m.monthlyBarDataFiltered(currentFilter);
-      const barOps = currentFilter === 'all' ? m.allOps : [currentFilter];
-      const barDatasets = barOps.map(op => ({
-        label: currentFilter === 'all' ? op : `${op} + D&S`,
-        data: filteredBarData.series[op] || [],
-        backgroundColor: (opHexMap2[op] || '#4BA3E3') + '99',
-        borderColor: opHexMap2[op] || '#4BA3E3',
-        borderWidth: 1, borderRadius: 4
-      }));
-      const c3 = new Chart(mbCtx, {
-        type: 'bar',
-        data: { labels: filteredBarData.labels, datasets: barDatasets },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: (items) => items[0].label,
-                label: (ctx) => {
-                  const op = ctx.dataset.label;
-                  const val = ctx.parsed.y;
-                  const sign = val >= 0 ? '+' : '';
-                  return `${op}: ${sign}${val.toFixed(1)}%`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-          }
-        }
-      });
-      activeCharts.push(c3);
-    }
-
-    // Pair analysis table
-    const pairTable = document.getElementById('pairTable');
-    if (pairTable && m.pairArray && m.pairArray.length) {
-      let ph = '<thead><tr>';
-      ['Par','Ops','TP','SL','Win Rate','P&L Neto','Profit Factor'].forEach(h => {
-        ph += `<th style="padding:9px 14px;text-align:${h==='Par'?'left':'center'};font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--textSub);font-weight:500;background:var(--bg)">${h}</th>`;
-      });
-      ph += '</tr></thead><tbody>';
-      m.pairArray.forEach(p => {
-        const wrC = p.wr>=70?'var(--green)':p.wr>=50?'var(--yellow)':'var(--red)';
-        const pnlC = p.netPnl>=0?'var(--green)':'var(--red)';
-        const pfC = p.pf===Infinity||p.pf>99?'var(--green)':p.pf>=2?'var(--green)':p.pf>=1?'var(--yellow)':'var(--red)';
-        const wins = m.equity.filter ? [] : [];
-        // Calculate avg win/loss per pair from closed data
-        const pairClosed = m.equity.filter ? m.pairArray : [];
-        ph += `<tr style="border-top:0.5px solid var(--border)">
-          <td style="padding:9px 14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text)">${p.par}</td>
-          <td style="padding:9px 14px;text-align:center;color:var(--textSub)">${p.ops}</td>
-          <td style="padding:9px 14px;text-align:center;color:var(--green);font-weight:600">${p.tp}</td>
-          <td style="padding:9px 14px;text-align:center;color:var(--red);font-weight:600">${p.sl}</td>
-          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrC}">${p.wr.toFixed(0)}%</td>
-          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${pnlC}">${p.netPnl>=0?'+':''}${p.netPnl.toFixed(1)}%</td>
-          <td style="padding:9px 14px;text-align:center;font-weight:700;font-family:'Inter',sans-serif;color:${pfC}">${p.pf===Infinity||p.pf>99?'∞':p.pf.toFixed(2)}</td>
-        </tr>`;
-      });
-      ph += '</tbody>';
-      pairTable.innerHTML = ph;
-    }
-
-    // Rolling Win Rate chart
-    const rwCtx = document.getElementById('rollingWrChart');
-    if (rwCtx && m.rollingHistory && m.rollingHistory.length) {
-      const rwC = new Chart(rwCtx, {
-        type: 'line',
-        data: {
-          labels: m.rollingHistory.map(r => r.i),
-          datasets: [
-            { label: 'Rolling WR', data: m.rollingHistory.map(r => r.wr),
-              borderColor: '#4BA3E3', borderWidth: 2, tension: 0.4, fill: false,
-              pointRadius: 2, pointBackgroundColor: '#4BA3E3' },
-            { label: 'WR Global', data: m.rollingHistory.map(() => m.wr),
-              borderColor: '#00D49A', borderWidth: 1.5, borderDash: [5,4],
-              tension: 0, fill: false, pointRadius: 0 }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ctx.dataset.label+': '+ctx.parsed.y.toFixed(0)+'%' } } },
-          scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 9 } }, grid: { color: 'rgba(128,128,128,0.08)' } },
-            y: { min:0, max:100, ticks: { color: '#5A7A9A', font: { size: 9 }, callback: v => v+'%' }, grid: { color: 'rgba(128,128,128,0.08)' } }
-          }
-        }
-      });
-      activeCharts.push(rwC);
-    }
-
-    // Frequency chart with moving average
-    const freqCtx = document.getElementById('freqChart');
-    if (freqCtx && m.weeklyFreq && m.weeklyFreq.length) {
-      const freqData = m.weeklyFreq.map(w => w.ops);
-      const windowSize = Math.min(4, m.weeklyFreq.length);
-      const movAvg = freqData.map((_, i) => {
-        const slice = freqData.slice(Math.max(0, i - windowSize + 1), i + 1);
-        return +(slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(2);
-      });
-      const fc = new Chart(freqCtx, {
-        type: 'bar',
-        data: {
-          labels: m.weeklyFreq.map(w => w.key.replace('-W','/W')),
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Ops semana',
-              data: freqData,
-              backgroundColor: m.weeklyFreq.map(w => {
-                const wr = w.ops > 0 ? w.tp/w.ops : 0;
-                return wr >= 0.7 ? '#00D49A66' : wr >= 0.5 ? '#FFB54766' : '#FF4C5E66';
-              }),
-              borderRadius: 4,
-              order: 2
-            },
-            {
-              type: 'line',
-              label: 'Media móvil',
-              data: movAvg,
-              borderColor: '#4BA3E3',
-              borderWidth: 2,
-              tension: 0.4,
-              fill: false,
-              pointRadius: 3,
-              pointBackgroundColor: '#4BA3E3',
-              order: 1
-            },
-            {
-              type: 'line',
-              label: 'Media global',
-              data: freqData.map(() => +m.avgOpsPerWeek.toFixed(2)),
-              borderColor: '#FFB547',
-              borderWidth: 1.5,
-              borderDash: [6, 4],
-              tension: 0,
-              fill: false,
-              pointRadius: 0,
-              order: 0
-            }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { 
-              title: items => items[0].label,
-              label: ctx => {
-                if (ctx.dataset.label === 'Ops semana') {
-                  const w = m.weeklyFreq[ctx.dataIndex];
-                  return [ctx.parsed.y+' ops · '+w.tp+' TP  '+w.sl+' SL'];
-                }
-                if (ctx.dataset.label === 'Media móvil') return 'Media móvil: '+ctx.parsed.y;
-                return 'Media global: '+ctx.parsed.y;
-              }
-            }}
-          },
-          scales: {
-            x: { ticks: { color: '#5A7A9A', font: { size: 8 }, maxRotation: 45 }, grid: { color: 'rgba(128,128,128,0.06)' } },
-            y: { ticks: { color: '#5A7A9A', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(128,128,128,0.06)' } }
-          }
-        }
-      });
-      activeCharts.push(fc);
-    }
-
-    // €100k evolution chart - clean smooth curve
-    const euroCtx = document.getElementById('euroChart');
-    if (euroCtx) {
-      const euroData = [100000, ...m.equity.map(e => e.euroVal || 100000)];
-      const euroLabels = [0, ...m.equity.map((_, i) => i + 1)];
-      const textColor = '#5A7A9A';
-      const gridColor = 'rgba(128,128,128,0.08)';
-      const ec = new Chart(euroCtx, {
-        type: 'line',
-        data: {
-          labels: euroLabels,
-          datasets: [{
-            data: euroData,
-            borderColor: '#00D49A',
-            borderWidth: 3,
-            tension: 0.4,
-            fill: true,
-            backgroundColor: (ctx) => {
-              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
-              gradient.addColorStop(0, 'rgba(0,212,154,0.18)');
-              gradient.addColorStop(1, 'rgba(0,212,154,0.01)');
-              return gradient;
-            },
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#00D49A',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: items => {
-                  const i = items[0].dataIndex;
-                  if (i === 0) return 'Inicio';
-                  const e = m.equity[i-1];
-                  let cumOps = 0, monthLabel = '';
-                  for (const row of m.monthly) {
-                    const mOps = m.allOps.reduce((s,op)=>s+(row.ops[op]?.tp||0)+(row.ops[op]?.sl||0),0);
-                    cumOps += mOps;
-                    if ((i-1) < cumOps) { monthLabel = row.label; break; }
-                  }
-                  return 'Op #'+i+(e?' · '+e.n:'')+(monthLabel?' · '+monthLabel:'');
-                },
-                label: ctx => {
-                  const i = ctx.dataIndex;
-                  const val = ctx.parsed.y;
-                  const fmtVal = new Intl.NumberFormat('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0}).format(val);
-                  if (i === 0) return 'Capital: '+fmtVal+' €';
-                  const e = m.equity[i-1];
-                  const sign = (e?.pnlV||0) >= 0 ? '+' : '';
-                  const changeEur = e ? Math.round(e.pnlV/100 * m.equity[i-2]?.euroVal || 0) : 0;
-                  return [
-                    'Capital: '+fmtVal+' €',
-                    e ? 'Op: '+sign+e.pnlV.toFixed(1)+'% · '+e.res : ''
-                  ].filter(Boolean);
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 12 },
-              grid: { color: gridColor },
-              title: { display: true, text: 'Operación #', color: textColor, font: { size: 9 } }
-            },
-            y: {
-              ticks: {
-                color: textColor, font: { size: 9 },
-                callback: v => new Intl.NumberFormat('es-ES',{maximumFractionDigits:0}).format(v)+' €'
-              },
-              grid: { color: gridColor }
-            }
-          }
-        }
-      });
-      activeCharts.push(ec);
-    }
-
-    // Monthly WR panel - polished column layout
-    const wrBadges = document.getElementById('monthlyWrBadges');
-    if (wrBadges && m.monthly.length) {
-      const opHexMap3 = { Dani: '#4BA3E3', Sergio: '#00D49A', 'D&S': '#FF4C5E' };
-      let html = '';
-      m.monthly.forEach(row => {
-        let totalTp = 0, totalSl = 0;
-        const opRows = m.allOps.map(op => {
-          const od = row.ops[op]; if (!od) return null;
-          const tp = od.tp||0, sl = od.sl||0;
-          totalTp += tp; totalSl += sl;
-          const total = tp+sl; if (!total) return null;
-          const wr = tp/total*100;
-          const opCol = opHexMap3[op]||'#4BA3E3';
-          const wrCol = wr>=70?'#00D49A':wr>=50?'#FFB547':'#FF4C5E';
-          const barW = wr.toFixed(0);
-          return `<div style="display:flex;flex-direction:column;gap:3px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:11px;font-weight:500;color:${opCol}">${op}</span>
-              <span style="font-size:13px;font-weight:700;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums;color:${wrCol}">${barW}%</span>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-              <div style="width:${barW}%;height:100%;background:${wrCol};border-radius:3px"></div>
-            </div>
-            <span style="font-size:10px;color:var(--muted)">${tp} TP  ${sl} SL</span>
-          </div>`;
-        }).filter(Boolean);
-        if (!opRows.length) return;
-        const globalTotal = totalTp+totalSl;
-        const globalWr = globalTotal>0?(totalTp/globalTotal*100):null;
-        const globalCol = globalWr===null?'var(--muted)':globalWr>=70?'#00D49A':globalWr>=50?'#FFB547':'#FF4C5E';
-        html += `<div style="background:var(--panel2);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;min-width:160px;flex:1;max-width:220px">
-          <div style="background:var(--bg);padding:10px 14px;border-bottom:0.5px solid var(--border)">
-            <span style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.08em">${row.label}</span>
-          </div>
-          <div style="padding:12px 14px;display:flex;flex-direction:column;gap:12px">
-            ${opRows.join('')}
-            <div style="border-top:0.5px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:11px;font-weight:500;color:var(--textSub)">Win Rate Global</span>
-              <span style="font-size:16px;font-weight:700;font-family:'Inter',sans-serif;color:${globalCol}">${globalWr!==null?globalWr.toFixed(0)+'%':'—'}</span>
-            </div>
-          </div>
-        </div>`;
-      });
-      wrBadges.innerHTML = html;
-    }
-  }, 100);
-}
-
-// ─── PASSWORD ──────────────────────────────────────
-const PW_KEY = 'td_auth';
-const CORRECT_PW = 'dcm';
-
+function unlock() { $('gate').classList.add('hidden'); loadData(currentUrl); }
 function checkPw() {
-  const input = document.getElementById('pwInput');
-  const err = document.getElementById('pwErr');
-  if (!input) return;
-  if (input.value === CORRECT_PW) {
-    localStorage.setItem(PW_KEY, '1');
-    document.getElementById('passwordScreen').style.display = 'none';
-    initDashboard();
-  } else {
-    err.textContent = 'Contraseña incorrecta';
-    input.value = '';
-    input.focus();
-    setTimeout(() => { if(err) err.textContent = ''; }, 2000);
-  }
+  const inp = $('pwInput');
+  if (inp.value === CORRECT_PW) { store(PW_KEY, '1'); unlock(); }
+  else { $('pwErr').textContent = 'Contraseña incorrecta'; inp.value = ''; inp.focus(); setTimeout(() => { $('pwErr').textContent = ''; }, 2500); }
 }
 
-function initDashboard() {
-  try {
-    const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
-    applyTheme(savedTheme);
-    loadData(currentUrl, null);
-  } catch(e) {
-    console.error('initDashboard error:', e);
-    alert('Error al iniciar: ' + e.message);
-  }
-}
-
-// ─── THEME ─────────────────────────────────────────
-const THEME_KEY = 'trading_theme';
-function applyTheme(theme) {
-  const root = document.documentElement;
-  const btn = document.getElementById('themeBtn');
-  if (theme === 'light') {
-    root.classList.add('light');
-    if (btn) btn.textContent = '☀️';
-  } else {
-    root.classList.remove('light');
-    if (btn) btn.textContent = '🌙';
-  }
-  localStorage.setItem(THEME_KEY, theme);
-}
-function toggleTheme() {
-  const current = localStorage.getItem(THEME_KEY) || 'dark';
-  applyTheme(current === 'dark' ? 'light' : 'dark');
-}
-
-// ─── AUTO-LOAD ──────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Restore theme always
-  const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
-  applyTheme(savedTheme);
-  // Check password
-  if (localStorage.getItem(PW_KEY) === '1') {
-    document.getElementById('passwordScreen').style.display = 'none';
-    initDashboard();
-  } else {
-    // Show password screen, focus input
-    setTimeout(() => {
-      const inp = document.getElementById('pwInput');
-      if (inp) inp.focus();
-    }, 100);
-  }
+  $('themeBtn').innerHTML = document.documentElement.getAttribute('data-theme') === 'dark' ? ICON_SUN : ICON_MOON;
+  $('themeBtn').addEventListener('click', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+  $('refreshBtn').addEventListener('click', () => loadData(currentUrl));
+  $('setupBtn').addEventListener('click', showSetup);
+  $('setupClose').addEventListener('click', closeSetup);
+  $('setup').addEventListener('click', e => { if (e.target.id === 'setup') closeSetup(); });
+  $('setupSave').addEventListener('click', () => { const u = $('csvUrl').value; if (u.trim()) loadData(normalizeUrl(u), { fromSetup: true }); });
+  $('setupReset').addEventListener('click', () => { $('csvUrl').value = DEFAULT_URL; });
+  $('pwBtn').addEventListener('click', checkPw);
+  $('pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkPw(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSetup(); });
+  if (store(PW_KEY) === '1') unlock(); else setTimeout(() => $('pwInput').focus(), 50);
 });
 </script>
+</body>
+</html>
